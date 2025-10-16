@@ -38,21 +38,22 @@ docker compose exec -it jobmanager bash -c "./bin/sql-client.sh -f /data/kafka-t
 * Continue...
 
 ## Ports 
-http://localhost:9000	-> Check data ingested in kafka
-http://localhost:8081	-> Check job in Flink SQL in Flink UI	
-http://localhost:9001	-> Check file stored as HiveMeta, MinIO, Data at s3a://warehouse/data/ 
-http://localhost:8082	-> Trino, query data from Iceberg (MinIO) -> SELECT * FROM iceberg.default.sensor_data LIMIT 10;
-http://localhost:9003	-> Pinot, Real-time data from kafka 
+- **[http://localhost:9000](http://localhost:9000)** → Check data ingested in Kafka  
+- **[http://localhost:8081](http://localhost:8081)** → Check job in Flink SQL via Flink UI
+- **[http://localhost:9001](http://localhost:9001)** → Check files stored as HiveMeta**, MinIO, and data at `s3a://warehouse/data/`  
+- **[http://localhost:8082](http://localhost:8082)** → Trino query data from Iceberg (MinIO) (ie: SELECT * FROM iceberg.default.sensor_data LIMIT 10;)
+- **[http://localhost:9003](http://localhost:9003)** -> Pinot for real-time data from kafka
+
 
 ## Plan
-[x] Data faker (data source later)
-[x] Kafka consumer (Kafdrop) + Docker manifest
-[x] Flink processing + Docker manifest
-[x] Iceberg MinIO + Docker manifest
-[ ] Volume/storage checks
-[ ] Trino query + Docker manifest
-[ ] Kubernetes + Prometheus + Grafana monitoring deployment performance
-[ ] Optional: Export api/metrics backend for each stage 
-[ ] Optional: Build custom UI for each stage 
+- [x] Data faker (data source later)
+- [x] Kafka consumer (Kafdrop) + Docker manifest
+- [x] Flink processing + Docker manifest
+- [x] Iceberg MinIO + Docker manifest
+- [ ] Volume/storage checks
+- [ ] Trino query + Docker manifest
+- [ ] Kubernetes + Prometheus + Grafana monitoring deployment performance
+- [ ] Optional: Export api/metrics backend for each stage 
+- [ ] Optional: Build custom UI for each stage 
 
 
