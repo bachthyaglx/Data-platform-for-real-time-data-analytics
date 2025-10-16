@@ -41,8 +41,8 @@ docker compose exec -it jobmanager bash -c "./bin/sql-client.sh -f /data/kafka-t
 http://localhost:9000	-> Check data ingested in kafka
 http://localhost:8081	-> Check job in Flink SQL in Flink UI	
 http://localhost:9001	-> Check file stored as HiveMeta, MinIO, Data at s3a://warehouse/data/ 
-// http://localhost:8082	-> Trino, query data from Iceberg (MinIO) -> SELECT * FROM iceberg.default.sensor_data LIMIT 10;
-// http://localhost:9003	-> Pinot, Real-time data from kafka 
+http://localhost:8082	-> Trino, query data from Iceberg (MinIO) -> SELECT * FROM iceberg.default.sensor_data LIMIT 10;
+http://localhost:9003	-> Pinot, Real-time data from kafka 
 
 ## Plan
 [x] Data faker (data source later)
