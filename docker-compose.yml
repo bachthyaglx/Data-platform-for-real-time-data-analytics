@@ -1,47 +1,58 @@
 services:
+  # =================== FLINK should be activated first, to listen and process Kafka ====================
+  # ==================== FLINK ====================
   jobmanager:
     build: ./flink
-    hostname: jobmanager
     container_name: jobmanager
     ports:
-      - "8081:8081"
+      - "8081:8081" # Flink Web UI
     command: jobmanager
     volumes:
       - .:/data/
     environment:
-    - |
-      FLINK_PROPERTIES=
-      jobmanager.rpc.address: jobmanager
-      rest.flamegraph.enabled: true
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+
   taskmanager:
     build: ./flink
-    hostname: taskmanager
+    container_name: taskmanager
+    command: taskmanager
     depends_on:
       - jobmanager
-    command: taskmanager
-    deploy:
-      replicas: 2
     environment:
-      - |
-        FLINK_PROPERTIES=
+      FLINK_PROPERTIES: |
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 4
 
+  # ==================== DATA GENERATOR ====================
+  generate_data:
+    build: ./generate_data
+    container_name: generate_data
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ==================== KAFKA ====================
+  # ==================== Zookeeper to manage and distribute Kafka brokers ====================
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.1
     container_name: zookeeper
+    volumes:
+      - ./data/zookeeper:/var/lib/zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
   kafka:
-    container_name: broker
     image: confluentinc/cp-kafka:7.5.1
+    container_name: broker
     depends_on:
       - zookeeper
     ports:
       - "9092:9092"
       - "29092:29092"
+    volumes:
+      - ./data/kafka:/var/lib/kafka/data
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -49,109 +60,108 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      test:
+        [
+          "CMD",
+          "kafka-topics",
+          "--bootstrap-server",
+          "localhost:9092",
+          "--list",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # ==================== KAFKA UI ====================
   kafdrop:
     image: obsidiandynamics/kafdrop
     container_name: kafdrop
     depends_on:
       - kafka
     ports:
-      - "9000:9000"
+      - "9000:9000" # Kafdrop Web UI
     environment:
       KAFKA_BROKERCONNECT: broker:9092
-      JVM_OPTS: "-Xms32M -Xmx64M"
 
+  # ==================== ICEBERG needs 3 layers (catalog, metadata, data) ====================
+  # ==================== ICEBERG: CATALOG layer (Hive Metastore / hms) ====================
+  # Component 1️⃣: Hive Metastore (HMS)
+  # - Feature: CATALOG - Manage metadata pointers
+  # - Lưu trữ: Con trỏ tới current metadata version
+  # - ACID: Atomic compare-and-swap cho transactions
+  # - Database: Derby (embedded) hoặc PostgreSQL/MySQL
+  # - Storage: ./data/hms/metastore_db/
+  hive-metastore:
+    build: ./hms-standalone-s3
+    container_name: hms
+    ports:
+      - "9083:9083" # Thrift API
+    volumes:
+      - ./data/hms:/opt/hive/metastore
+    environment:
+      HMS_LOGLEVEL: INFO
+
+  # ==================== ICEBERG: METADATA + DATA STORAGE layer (MinIO) ====================
+  # Components 2️⃣ + 3️⃣: MinIO (S3-compatible Object Storage)
+  # - Feature: Store both "metadata files" and "data" files
+  # - 2️⃣ METADATA: JSON, Avro files
+  #   Path: /data/warehouse/db/{table}/metadata/
+  #   Files: v*.metadata.json, snap-*.avro, manifest-*.avro
+  #   Size: ~1-5 MB per table
+  # - 3️⃣ DATA: Parquet/ORC/Avro files
+  #   Path: /data/warehouse/db/{table}/data/
+  #   Files: Actual data records
+  #   Size: GBs-TBs
+  # - Storage: ./data/minio/warehouse/
   minio:
     image: minio/minio
     container_name: minio
-    environment:
-      - MINIO_ROOT_USER=admin
-      - MINIO_ROOT_PASSWORD=password
     ports:
-      - 9001:9001
+      - "9001:9001" # MinIO Console UI
+    volumes:
+      - ./data/minio:/data
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
     command: ["server", "/data", "--console-address", ":9001"]
 
+  # MinIO Client: Initialize warehouse bucket
   mc:
-    depends_on:
-      - minio
     image: minio/mc
     container_name: mc
-    entrypoint: >
+    depends_on:
+      - minio
+    entrypoint: |
       /bin/sh -c "
-      until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
-      /usr/bin/mc rm -r --force minio/warehouse;
-      /usr/bin/mc mb minio/warehouse;
+      until mc config host add minio http://minio:9000 admin password; do 
+        echo 'Waiting for MinIO...' && sleep 1; 
+      done;
+      mc mb -p minio/warehouse;
       tail -f /dev/null
-      " 
+      "
 
-  hive-metastore:
-    container_name: hms
-    build: ./hms-standalone-s3
-    ports:
-      - "9083:9083"
-    environment:
-      - HMS_LOGLEVEL=INFO
-
+  # ==================== CLIENTS ====================
   pyiceberg:
     image: python:3.12-bookworm
     container_name: pyiceberg
+    depends_on:
+      - hive-metastore
+      - minio
     environment:
       PYICEBERG_CATALOG__DEFAULT__URI: thrift://hms:9083
       PYICEBERG_CATALOG__DEFAULT__S3__ACCESS_KEY_ID: admin
       PYICEBERG_CATALOG__DEFAULT__S3__SECRET_ACCESS_KEY: password
-      PYICEBERG_CATALOG__DEFAULT__S3__PATH_STYLE_ACCESS: true
+      PYICEBERG_CATALOG__DEFAULT__S3__PATH_STYLE_ACCESS: "true"
       PYICEBERG_CATALOG__DEFAULT__S3__ENDPOINT: http://minio:9000
-    entrypoint: >
+    entrypoint: |
       /bin/sh -c "
-      pip install pyiceberg["s3fs,hive,pyarrow"];
+      pip install -q pyiceberg[s3fs,hive,pyarrow];
       sleep infinity
       "
-      
 
-  duckdb:
-    image: davidgasquez/duckdb
-    container_name: duckdb
-    restart: no
-    entrypoint: tail -f /dev/null
-
-  kcat:
-    image: edenhill/kcat:1.7.1
-    container_name: kcat
-    restart: no
-    entrypoint: tail -f /dev/null
-
-  # shadowtraffic:
-  # # watch 'docker exec shadowtraffic curl -s localhost:9400/metrics |grep events_sent'
-  #   image: shadowtraffic/shadowtraffic:0.6.0
-  #   container_name: shadowtraffic
-  #     #    profiles: ["shadowtraffic"]
-  #   env_file:
-  #     - shadowtraffic/license.env
-  #   volumes:
-  #     - ./shadowtraffic:/data
-  #   command: --config /data/kafka-retail.json
-  #   depends_on:
-  #     kafka:
-  #       condition: service_healthy
-
-  generate_data:
-    build: ./generate_data
-    container_name: generate_data
-    depends_on:
-      kafka:
-        condition: service_healthy
-    command: ["tail", "-f", "/dev/null"]
-
-# Without a network explicitly defined, you hit this Hive/Thrift error
-# java.net.URISyntaxException Illegal character in hostname
-# https://github.com/TrivadisPF/platys-modern-data-platform/issues/231
 networks:
   default:
-     name: zaphod
+    name: zaphod
