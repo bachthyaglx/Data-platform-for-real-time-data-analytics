@@ -1,17 +1,10 @@
-# generate_data/producer.py
-from kafka import KafkaProducer
-import json
+# generate_data/generator.py
 import random
-import time
 import uuid
-from datetime import datetime
-
-producer = KafkaProducer(
-    bootstrap_servers='broker:9092',
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')
-)
+import time
 
 def generate_order():
+    """Generate fake order data"""
     return {
         "orderId": str(uuid.uuid4()),
         "customerId": str(uuid.uuid4()),
@@ -24,9 +17,3 @@ def generate_order():
         "creditCardNumber": "0000-0000-0000-0000",
         "discountPercent": random.randint(0, 15)
     }
-
-while True:
-    message = generate_order()
-    producer.send('orders', message)
-    print(f"[{datetime.now()}] Sent: {message}")
-    time.sleep(1)  # gửi 1 bản tin mỗi giây

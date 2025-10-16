@@ -12,6 +12,9 @@ services:
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: jobmanager
+    depends_on:
+      - hive-metastore
+      - minio
 
   taskmanager:
     build: ./flink
@@ -24,13 +27,34 @@ services:
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 4
 
-  # ==================== DATA GENERATOR ====================
-  generate_data:
-    build: ./generate_data
-    container_name: generate_data
+  # ==================== KAFKA PRODUCER ====================
+  kafka_producer:
+    build:
+      context: .
+      dockerfile: kafka/Dockerfile
+    container_name: kafka_producer
     depends_on:
       kafka:
         condition: service_healthy
+    restart: unless-stopped
+
+  # ==================== FLINK JOB AUTO-SUBMIT ====================
+  flink_job_submitter:
+    build: ./flink
+    container_name: flink_job_submitter
+    depends_on:
+      - jobmanager
+      - taskmanager
+      - kafka_producer
+    command: >
+      bash -c "
+      echo '⏳ Waiting for Flink to be ready...' &&
+      sleep 20 &&
+      echo '🚀 Submitting Flink job...' &&
+      /opt/flink/bin/sql-client.sh -f /opt/flink/jobs/kafka-to-iceberg.sql &&
+      echo '✅ Job submitted!'
+      "
+    restart: "no"
 
   # ==================== KAFKA ====================
   # ==================== Zookeeper to manage and distribute Kafka brokers ====================

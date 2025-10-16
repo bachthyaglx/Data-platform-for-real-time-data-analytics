@@ -10,16 +10,39 @@
 ![Prometheus](https://img.shields.io/badge/Prometheus-black?logo=prometheus&logoColor=white)
 ![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)
 
-## Run it all
+## Run program
 ```bash
-# Bring up the stack
+# All in one
 docker compose up
+```
 
-# Generate log and let kafka ingest data
-docker compose exec -it generate_data python producer.py
+## Troubleshooting
+### Kafka producer not sending data
+```bash
+docker logs -f kafka_producer
+docker restart kafka_producer
+```
+### Flink job fails
+```bash
+docker logs taskmanager
+docker logs jobmanager
+```
+### Query Iceberg data with PyIceberg
+```bash
+docker exec -it pyiceberg python
 
-# Start job to ingest from Kafka into Iceberg
-docker compose exec -it jobmanager bash -c "./bin/sql-client.sh -f /data/kafka-to-iceberg.sql"
+from pyiceberg.catalog import load_catalog
+catalog = load_catalog("default")
+table = catalog.load_table("default.t_i_orders")
+df = table.scan().to_pandas()
+print(df.head())
+print(f"Total rows: {len(df)}")
+```
+### No data in Iceberg
+```bash
+- Check Flink job is running: http://localhost:8081
+- Check checkpoint interval: default is 60s
+- Check MinIO: http://localhost:9001 (admin/password)
 ```
 
 ## Test data in UI:
@@ -41,7 +64,7 @@ docker compose exec -it jobmanager bash -c "./bin/sql-client.sh -f /data/kafka-t
 - **[http://localhost:9000](http://localhost:9000)** → Check data ingested in Kafka  
 - **[http://localhost:8081](http://localhost:8081)** → Check job in Flink SQL via Flink UI
 - **[http://localhost:9001](http://localhost:9001)** → Check files stored as HiveMeta**, MinIO, and data at `s3a://warehouse/data/`  
-- **[http://localhost:8082](http://localhost:8082)** → Trino query data from Iceberg (MinIO) (ie: SELECT * FROM iceberg.default.sensor_data LIMIT 10;)
+- **[http://localhost:8082](http://localhost:8082)** → Trino query data from Iceberg
 - **[http://localhost:9003](http://localhost:9003)** -> Pinot for real-time data from kafka
 
 
