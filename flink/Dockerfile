@@ -62,8 +62,8 @@ RUN echo "-> Install JARs: Hadoop" && \
 
 # Add Flink S3 FileSystem plugin (needed to write to s3a://)
 RUN echo "-> Install JARs: Flink S3 FS plugin" && \
-curl -o /opt/flink/lib/flink-s3-fs-hadoop-1.18.1.jar \
-https://repo1.maven.org/maven2/org/apache/flink/flink-s3-fs-hadoop/1.18.1/flink-s3-fs-hadoop-1.18.1.jar
+    curl -o /opt/flink/lib/flink-s3-fs-hadoop-1.18.1.jar \
+    https://repo1.maven.org/maven2/org/apache/flink/flink-s3-fs-hadoop/1.18.1/flink-s3-fs-hadoop-1.18.1.jar
 
 
 # Set the launch command

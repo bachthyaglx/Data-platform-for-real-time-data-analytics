@@ -1,29 +1,41 @@
 services:
-  # =================== FLINK should be activated first, to listen and process Kafka ====================
   # ==================== FLINK ====================
   jobmanager:
     build: ./flink
+    hostname: jobmanager
     container_name: jobmanager
+    depends_on:
+      - minio
+      - hive-metastore
     ports:
-      - "8081:8081" # Flink Web UI
-    command: jobmanager
+      - "8081:8081"
+    command: ["bash", "/data/flink/submit_job.sh"]
     volumes:
       - .:/data/
+      - flink-ready:/tmp
     environment:
-      FLINK_PROPERTIES: |
+      - |
+        FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
-    depends_on:
-      - hive-metastore
-      - minio
+        rest.flamegraph.enabled: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/jobs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
 
   taskmanager:
     build: ./flink
-    container_name: taskmanager
-    command: taskmanager
+    hostname: taskmanager
     depends_on:
       - jobmanager
+    command: taskmanager
+    deploy:
+      replicas: 1
     environment:
-      FLINK_PROPERTIES: |
+      - |
+        FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 4
 
@@ -36,28 +48,22 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      jobmanager:
+        condition: service_started # Wait for container to start
+    volumes:
+      - flink-ready:/tmp # Shared volume
+    command: >
+      /bin/bash -c "
+      echo 'Waiting for Flink job to be ready...';
+      until [ -f /tmp/flink-job-ready ]; do
+        echo 'Waiting for Flink job...';
+        sleep 1;
+      done;
+      echo '✓ Flink job is ready, starting Kafka producer...';
+      python producer.py;
+      "
     restart: unless-stopped
 
-  # ==================== FLINK JOB AUTO-SUBMIT ====================
-  flink_job_submitter:
-    build: ./flink
-    container_name: flink_job_submitter
-    depends_on:
-      - jobmanager
-      - taskmanager
-      - kafka_producer
-    command: >
-      bash -c "
-      echo '⏳ Waiting for Flink to be ready...' &&
-      sleep 20 &&
-      echo '🚀 Submitting Flink job...' &&
-      /opt/flink/bin/sql-client.sh -f /opt/flink/jobs/kafka-to-iceberg.sql &&
-      echo '✅ Job submitted!'
-      "
-    restart: "no"
-
-  # ==================== KAFKA ====================
-  # ==================== Zookeeper to manage and distribute Kafka brokers ====================
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.1
     container_name: zookeeper
@@ -68,15 +74,13 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
 
   kafka:
-    image: confluentinc/cp-kafka:7.5.1
     container_name: broker
+    image: confluentinc/cp-kafka:7.5.1
     depends_on:
       - zookeeper
     ports:
       - "9092:9092"
       - "29092:29092"
-    volumes:
-      - ./data/kafka:/var/lib/kafka/data
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -84,8 +88,8 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     healthcheck:
       test:
         [
@@ -99,7 +103,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ==================== KAFKA UI ====================
   kafdrop:
     image: obsidiandynamics/kafdrop
     container_name: kafdrop
@@ -119,7 +122,7 @@ services:
   # - Database: Derby (embedded) hoặc PostgreSQL/MySQL
   # - Storage: ./data/hms/metastore_db/
   hive-metastore:
-    build: ./hms-standalone-s3
+    build: ./iceberg/hms-standalone-s3
     container_name: hms
     ports:
       - "9083:9083" # Thrift API
@@ -141,30 +144,26 @@ services:
   #   Size: GBs-TBs
   # - Storage: ./data/minio/warehouse/
   minio:
-    image: minio/minio
-    container_name: minio
+    image: minio/minio:latest
     ports:
-      - "9001:9001" # MinIO Console UI
-    volumes:
-      - ./data/minio:/data
+      - "9091:9000"
+      - "9001:9001" # MinIO UI
+    command: ["server", "--console-address", ":9001", "/data"]
     environment:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: password
-    command: ["server", "/data", "--console-address", ":9001"]
 
-  # MinIO Client: Initialize warehouse bucket
-  mc:
-    image: minio/mc
-    container_name: mc
+  createbuckets:
+    image: quay.io/minio/mc:latest
     depends_on:
       - minio
-    entrypoint: |
+    restart: on-failure
+    entrypoint: >
       /bin/sh -c "
-      until mc config host add minio http://minio:9000 admin password; do 
-        echo 'Waiting for MinIO...' && sleep 1; 
-      done;
-      mc mb -p minio/warehouse;
-      tail -f /dev/null
+      sleep 5;
+      /usr/bin/mc alias set minio http://minio:9000 admin password;
+      /usr/bin/mc mb minio/warehouse;
+      exit 0;
       "
 
   # ==================== CLIENTS ====================
@@ -185,6 +184,9 @@ services:
       pip install -q pyiceberg[s3fs,hive,pyarrow];
       sleep infinity
       "
+
+volumes:
+  flink-ready:
 
 networks:
   default:

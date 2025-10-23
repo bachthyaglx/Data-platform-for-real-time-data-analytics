@@ -1,0 +1,38 @@
+{
+  "tableName": "orders_realtime",
+  "tableType": "REALTIME",
+  "segmentsConfig": {
+    "schemaName": "orders_realtime",
+    "replication": "1",
+    "replicasPerPartition": "1",
+    "timeColumnName": "create_ts",
+    "timeType": "MILLISECONDS",
+    "retentionTimeUnit": "DAYS",
+    "retentionTimeValue": "7"
+  },
+  "tenants": {
+    "broker": "DefaultTenant",
+    "server": "DefaultTenant"
+  },
+  "tableIndexConfig": {
+    "loadMode": "MMAP",
+    "fieldConfigList": [],
+    "streamConfigs": {
+      "streamType": "kafka",
+      "stream.kafka.topic.name": "orders",
+      "stream.kafka.broker.list": "broker:9092",
+      "stream.kafka.consumer.type": "lowlevel",
+      "stream.kafka.decoder.class.name": "org.apache.pinot.plugin.stream.kafka.KafkaJSONMessageDecoder",
+      "stream.kafka.consumer.prop.bootstrap.servers": "broker:9092",
+      "stream.kafka.consumer.prop.group.id": "pinot-consumer-orders-rt",
+      "stream.kafka.consumer.prop.auto.offset.reset": "smallest",
+      "stream.kafka.consumer.factory.class.name": "org.apache.pinot.plugin.stream.kafka20.KafkaConsumerFactory"
+    }
+  },
+  "metadata": {},
+  "routing": {
+    "instanceSelectorType": "strictReplicaGroup"
+  },
+  "query": {},
+  "isDimTable": false
+}

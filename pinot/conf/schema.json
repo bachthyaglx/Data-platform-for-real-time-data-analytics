@@ -1,0 +1,51 @@
+{
+  "schemaName": "orders_realtime",
+  "dimensionFieldSpecs": [
+    {
+      "name": "orderId",
+      "dataType": "STRING"
+    },
+    {
+      "name": "customerId",
+      "dataType": "STRING"
+    },
+    {
+      "name": "product",
+      "dataType": "STRING"
+    },
+    {
+      "name": "description",
+      "dataType": "STRING"
+    },
+    {
+      "name": "creditCardNumber",
+      "dataType": "STRING"
+    },
+    {
+      "name": "backordered",
+      "dataType": "BOOLEAN"
+    }
+  ],
+  "metricFieldSpecs": [
+    {
+      "name": "orderNumber",
+      "dataType": "INT"
+    },
+    {
+      "name": "cost",
+      "dataType": "DOUBLE"
+    },
+    {
+      "name": "discountPercent",
+      "dataType": "INT"
+    }
+  ],
+  "dateTimeFieldSpecs": [
+    {
+      "name": "create_ts",
+      "dataType": "LONG",
+      "format": "1:MILLISECONDS:EPOCH",
+      "granularity": "1:MILLISECONDS"
+    }
+  ]
+}

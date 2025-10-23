@@ -16,10 +16,9 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
-print("🚀 Kafka Producer started...")
-
+# Produce messages indefinitely
 while True:
     message = generate_order()
     producer.send('orders', message)
     print(f"[{datetime.now()}] Sent: {message}")
-    time.sleep(1)
+    time.sleep(5) # Produce a message every 5 seconds

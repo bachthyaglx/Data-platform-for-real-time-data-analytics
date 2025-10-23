@@ -1,0 +1,134 @@
+services:
+  pinot-zookeeper:
+    image: zookeeper:3.8
+    container_name: pinot-zookeeper
+    ports:
+      - "2182:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - default
+
+  pinot-controller:
+    image: apachepinot/pinot:0.12.0
+    command: "StartController -zkAddress pinot-zookeeper:2181"
+    container_name: pinot-controller
+    hostname: pinot-controller
+    restart: unless-stopped
+    ports:
+      - "9003:9000"
+    environment:
+      JAVA_OPTS: "-Dplugins.dir=/opt/pinot/plugins -Xms1G -Xmx4G -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    depends_on:
+      - pinot-zookeeper
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    volumes:
+      - ./pinot/conf:/tmp/pinot/conf
+    networks:
+      - default
+
+  pinot-broker:
+    image: apachepinot/pinot:0.12.0
+    command: "StartBroker -zkAddress pinot-zookeeper:2181"
+    restart: unless-stopped
+    container_name: pinot-broker
+    ports:
+      - "8099:8099"
+    environment:
+      JAVA_OPTS: "-Dplugins.dir=/opt/pinot/plugins -Xms2G -Xmx4G -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    depends_on:
+      pinot-controller:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8099/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - default
+
+  pinot-server:
+    image: apachepinot/pinot:0.12.0
+    command: "StartServer -zkAddress pinot-zookeeper:2181"
+    restart: unless-stopped
+    container_name: pinot-server
+    ports:
+      - "8097:8097"
+      - "8098:8098"
+    environment:
+      JAVA_OPTS: "-Dplugins.dir=/opt/pinot/plugins -Xms2G -Xmx8G -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    depends_on:
+      pinot-controller:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -f http://localhost:8097/health/readiness || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - default
+
+  pinot-setup:
+    image: apachepinot/pinot:0.12.0
+    container_name: pinot-setup
+    volumes:
+      - ./pinot:/pinot
+    entrypoint: []
+    command:
+      - /bin/bash
+      - -c
+      - |
+        set -e
+        echo "========================================"
+        echo "Pinot Setup - Starting"
+        echo "========================================"
+
+        echo "Step 0: Verify files exist"
+        ls -la /pinot/conf/
+
+        echo "Step 1: Wait for Controller"
+        for i in {1..30}; do
+          if curl -sf http://pinot-controller:9000/health > /dev/null 2>&1; then
+            echo "✓ Controller ready"
+            break
+          fi
+          echo "Waiting for controller... ($i/30)"
+          sleep 2
+        done
+
+        echo "Step 2: Adding Schema AND Table Together"
+        /opt/pinot/bin/pinot-admin.sh AddTable \
+          -tableConfigFile /pinot/conf/table-realtime.json \
+          -schemaFile /pinot/conf/schema.json \
+          -controllerHost pinot-controller \
+          -controllerPort 9000 \
+          -exec
+
+        echo "========================================"
+        echo "✓✓✓ Setup Complete ✓✓✓"
+        echo "========================================"
+    restart: "no"
+    environment:
+      JAVA_OPTS: "-Dpinot.admin.system.exit=true"
+    depends_on:
+      pinot-controller:
+        condition: service_healthy
+    networks:
+      - default
+
+networks:
+  default:
+    external: true
+    name: zaphod
