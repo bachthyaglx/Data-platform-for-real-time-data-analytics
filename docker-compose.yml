@@ -67,8 +67,6 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.1
     container_name: zookeeper
-    volumes:
-      - ./data/zookeeper:/var/lib/zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -124,12 +122,17 @@ services:
   hive-metastore:
     build: ./iceberg/hms-standalone-s3
     container_name: hms
+    depends_on:
+      - minio
     ports:
-      - "9083:9083" # Thrift API
-    volumes:
-      - ./data/hms:/opt/hive/metastore
+      - "9083:9083"
     environment:
       HMS_LOGLEVEL: INFO
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 6<> /dev/tcp/localhost/9083"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ==================== ICEBERG: METADATA + DATA STORAGE layer (MinIO) ====================
   # Components 2️⃣ + 3️⃣: MinIO (S3-compatible Object Storage)
@@ -145,6 +148,7 @@ services:
   # - Storage: ./data/minio/warehouse/
   minio:
     image: minio/minio:latest
+    container_name: minio
     ports:
       - "9091:9000"
       - "9001:9001" # MinIO UI
@@ -155,6 +159,7 @@ services:
 
   createbuckets:
     image: quay.io/minio/mc:latest
+    container_name: createbuckets
     depends_on:
       - minio
     restart: on-failure
@@ -163,6 +168,7 @@ services:
       sleep 5;
       /usr/bin/mc alias set minio http://minio:9000 admin password;
       /usr/bin/mc mb minio/warehouse;
+      /usr/bin/mc policy set public minio/warehouse;
       exit 0;
       "
 

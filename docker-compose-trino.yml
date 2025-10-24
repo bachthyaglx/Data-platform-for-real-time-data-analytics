@@ -1,0 +1,20 @@
+services:
+  trino:
+    image: trinodb/trino:435
+    container_name: trino
+    ports:
+      - "8090:8080"
+    volumes:
+      - ./trino/etc:/etc/trino
+    networks:
+      - zaphod
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  zaphod:
+    external: true

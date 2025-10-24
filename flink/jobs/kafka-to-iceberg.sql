@@ -13,7 +13,7 @@ CREATE TABLE t_k_orders
   ) WITH (
     'connector' = 'kafka',
     'topic' = 'orders',
-    'properties.bootstrap.servers' = 'broker:29092',
+    'properties.bootstrap.servers' = 'broker:9092',
     'scan.startup.mode' = 'earliest-offset',
     'format' = 'json'
   );
@@ -35,9 +35,7 @@ CREATE TABLE t_i_orders
   SELECT * FROM t_k_orders 
   WHERE cost > 100;
 
--- 2. Flink Job 2: Ghi dữ liệu đã lọc vào Kafka Topic cho Pinot (Real-time Analytics)
 
--- Định nghĩa Kafka Sink Table cho Pinot
 CREATE TABLE t_k_pinot_sink (
     orderId           STRING,
     customerId        STRING,
@@ -51,7 +49,7 @@ CREATE TABLE t_k_pinot_sink (
     'format' = 'json'
 );
 
--- Bắt đầu Streaming Job thứ hai (INSERT)
+
 INSERT INTO t_k_pinot_sink
 SELECT 
     orderId,

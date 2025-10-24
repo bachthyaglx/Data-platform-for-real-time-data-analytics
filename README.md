@@ -13,7 +13,11 @@
 ## Run program
 ```bash
 # All in one
-docker compose up
+docker compose \
+  -f docker-compose-base.yml \
+  -f docker-compose.pinot.yml \
+  -f docker.compose-trino.yml \
+  up
 ```
 
 ## Test data in UI
@@ -31,7 +35,11 @@ docker compose up
 
 * Pinot UI: http://localhost:9003 
 
-  ![alt text](image.png)
+  ![alt text](images/pinot.png)
+
+* Trino UI: http://localhost:8082 
+
+  ![alt text](images/trino.png)
   
 * Continue...
 
@@ -77,7 +85,7 @@ print(f"Total rows: {len(df)}")
 - [x] Flink processing + Docker manifest
 - [x] Iceberg MinIO + Docker manifest
 - [x] Volume/storage checks
-- [ ] Trino query + Docker manifest
+- [x] Trino query + Docker manifest
 - [x] Pinot real-time analytics + Docker manifest
 - [ ] Kubernetes + Prometheus + Grafana monitoring deployment performance
 - [ ] Optional: Export api/metrics backend for each stage 
