@@ -17,9 +17,11 @@
 ```bash
 # All in one
 docker compose \
-  -f docker-compose-base.yml \
-  -f docker-compose.pinot.yml \
-  -f docker.compose-trino.yml \
+  -f docker-compose-iceberg.yml \
+  -f docker-compose-flink.yml \
+  -f docker-compose-kafka.yml \
+  -f docker-compose-pinot.yml \
+  -f docker-compose-trino.yml \
   up
 ```
 

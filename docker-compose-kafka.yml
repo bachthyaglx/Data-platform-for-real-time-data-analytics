@@ -1,0 +1,80 @@
+# docker-compose-kafka.yml
+
+services:
+  kafka_producer:
+    build:
+      context: .
+      dockerfile: kafka/Dockerfile
+    container_name: kafka_producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+      jobmanager:
+        condition: service_started
+    volumes:
+      - flink-ready:/tmp
+    command: >
+      /bin/bash -c "
+      echo 'Waiting for Flink job to be ready...';
+      until [ -f /tmp/flink-job-ready ]; do
+        echo 'Waiting for Flink job...';
+        sleep 1;
+      done;
+      echo '✓ Flink job is ready, starting Kafka producer...';
+      python producer.py;
+      "
+    restart: unless-stopped
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    container_name: broker
+    image: confluentinc/cp-kafka:7.5.1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "kafka-topics",
+          "--bootstrap-server",
+          "localhost:9092",
+          "--list",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafdrop:
+    image: obsidiandynamics/kafdrop
+    container_name: kafdrop
+    depends_on:
+      - kafka
+    ports:
+      - "9000:9000"
+    environment:
+      KAFKA_BROKERCONNECT: broker:9092
+
+volumes:
+  flink-ready:
+
+networks:
+  default:
+    name: zaphod

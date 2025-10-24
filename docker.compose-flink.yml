@@ -1,0 +1,48 @@
+# docker-compose-flink.yml
+
+services:
+  jobmanager:
+    build: ./flink
+    hostname: jobmanager
+    container_name: jobmanager
+    depends_on:
+      - minio
+      - hive-metastore
+    ports:
+      - "8081:8081"
+    command: ["bash", "/data/flink/submit_job.sh"]
+    volumes:
+      - .:/data/
+      - flink-ready:/tmp
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        rest.flamegraph.enabled: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/jobs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  taskmanager:
+    build: ./flink
+    hostname: taskmanager
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    deploy:
+      replicas: 1
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 4
+
+volumes:
+  flink-ready:
+
+networks:
+  default:
+    name: zaphod
