@@ -1,5 +1,4 @@
 ## Techs
-
 ![Apache Kafka](https://img.shields.io/badge/Apache%20Kafka-Event%20Streaming-black?logo=apachekafka)
 ![Apache Flink](https://img.shields.io/badge/Apache%20Flink-Real%20Time%20Processing-orange?logo=apacheflink)
 ![Apache Iceberg](https://img.shields.io/badge/Apache%20Iceberg-Table%20Format-blue?logo=apache)
@@ -9,6 +8,10 @@
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)
 ![Prometheus](https://img.shields.io/badge/Prometheus-black?logo=prometheus&logoColor=white)
 ![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)
+
+## Prerequisites 
+* Python (version >= 3.8)
+* Docker 
 
 ## Run program
 ```bash
@@ -20,18 +23,25 @@ docker compose \
   up
 ```
 
+## Network & Ports  
+- **[http://localhost:9000](http://localhost:9000)** → Kafka UI
+- **[http://localhost:8081](http://localhost:8081)** → Stream processing UI
+- **[http://localhost:9001](http://localhost:9001)** → Object storage UI (HiveMeta, MinIO, json data)
+- **[http://localhost:9003](http://localhost:9003)** → Pinot real-time analytics
+- **[http://localhost:8082](http://localhost:8090)** → Trino query engine UI
+
 ## Test data in UI
 * Kafka UI (Kafdrop): http://localhost:9000
   
-  ![image](https://github.com/user-attachments/assets/b47615f9-baef-4170-a165-250ef4bd9dca)
+  ![image](images/kafdrop.png)
 
 * Flink UI: http://localhost:8081
   
-  ![image](https://github.com/user-attachments/assets/ab7aee08-e145-439f-b4a3-ccbbb32b34fe)
+  ![image](images/flink.png)
 
 * Iceberg UI: http://localhost:9001 (admin/password)
   
-  ![image](https://github.com/user-attachments/assets/9816f55c-fe5a-4e06-a494-50d27b43329e)
+  ![image](images/minio.png)
 
 * Pinot UI: http://localhost:9003 
 
@@ -40,15 +50,8 @@ docker compose \
 * Trino UI: http://localhost:8082 
 
   ![alt text](images/trino.png)
-  
-* Continue...
 
-## Ports 
-- **[http://localhost:9000](http://localhost:9000)** → Check data ingested in Kafka  
-- **[http://localhost:8081](http://localhost:8081)** → Check job in Flink SQL via Flink UI
-- **[http://localhost:9001](http://localhost:9001)** → Check files stored as HiveMeta**, MinIO, and data at `s3a://warehouse/data/`  
-- **[http://localhost:9003](http://localhost:9003)** → Pinot for real-time analytics from kafka
-- **[http://localhost:8082](http://localhost:8082)** → Trino query batch data from Iceberg
+* Continue...
 
 ## Troubleshooting
 ### Kafka producer not sending data
@@ -88,7 +91,7 @@ print(f"Total rows: {len(df)}")
 - [x] Trino query + Docker manifest
 - [x] Pinot real-time analytics + Docker manifest
 - [ ] Kubernetes + Prometheus + Grafana monitoring deployment performance
-- [ ] Optional: Export api/metrics backend for each stage 
-- [ ] Optional: Build custom UI for each stage 
+- [ ] Optional: Export api/metrics backend for each manifest
+- [ ] Optional: Build custom UI for services
 - [ ] !!!!Optional: Fullstack production!!!!
 
