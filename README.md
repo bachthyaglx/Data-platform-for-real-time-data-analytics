@@ -49,6 +49,12 @@ docker compose \
 
 * Trino UI: http://localhost:8082 
 
+  ```bash
+  docker exec -it trino trino
+  ```
+
+  Then, run following cmds to see results
+
   ![alt text](images/trino.png)
 
 * Continue...
