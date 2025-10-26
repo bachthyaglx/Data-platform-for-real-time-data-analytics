@@ -1,14 +1,14 @@
 {
-  "tableName": "orders_realtime",
+  "tableName": "orders_pinot",
   "tableType": "REALTIME",
   "segmentsConfig": {
-    "schemaName": "orders_realtime",
+    "schemaName": "orders_pinot",
     "replication": "1",
-    "replicasPerPartition": "1",
     "timeColumnName": "create_ts",
     "timeType": "MILLISECONDS",
     "retentionTimeUnit": "DAYS",
-    "retentionTimeValue": "7"
+    "retentionTimeValue": "7",
+    "segmentPushType": "APPEND"
   },
   "tenants": {
     "broker": "DefaultTenant",
@@ -16,24 +16,20 @@
   },
   "tableIndexConfig": {
     "loadMode": "MMAP",
-    "fieldConfigList": [],
     "streamConfigs": {
       "streamType": "kafka",
-      "stream.kafka.topic.name": "orders",
-      "stream.kafka.broker.list": "broker:9092",
       "stream.kafka.consumer.type": "lowlevel",
+      "stream.kafka.topic.name": "orders",
       "stream.kafka.decoder.class.name": "org.apache.pinot.plugin.stream.kafka.KafkaJSONMessageDecoder",
+      "stream.kafka.consumer.factory.class.name": "org.apache.pinot.plugin.stream.kafka20.KafkaConsumerFactory",
+      "stream.kafka.broker.list": "broker:9092",
       "stream.kafka.consumer.prop.bootstrap.servers": "broker:9092",
       "stream.kafka.consumer.prop.group.id": "pinot-consumer-orders-rt",
-      "stream.kafka.consumer.prop.auto.offset.reset": "smallest",
-      "stream.kafka.consumer.factory.class.name": "org.apache.pinot.plugin.stream.kafka20.KafkaConsumerFactory",
-      "stream.kafka.zookeeper.connect": "zookeeper:2181"
+      "stream.kafka.consumer.offsets.initial": "smallest"
     }
   },
-  "metadata": {},
-  "routing": {
-    "instanceSelectorType": "strictReplicaGroup"
+  "ingestionConfig": {
+    "transformConfigs": []
   },
-  "query": {},
-  "isDimTable": false
+  "metadata": {}
 }

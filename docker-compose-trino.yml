@@ -7,7 +7,7 @@ services:
     volumes:
       - ./trino/etc:/etc/trino
     networks:
-      - zaphod
+      - default
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
       interval: 10s
@@ -16,5 +16,6 @@ services:
       start_period: 30s
 
 networks:
-  zaphod:
+  default:
     external: true
+    name: zaphod

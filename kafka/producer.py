@@ -1,14 +1,14 @@
 # kafka/producer.py
 from kafka import KafkaProducer
+from datetime import datetime
 import json
 import time
-from datetime import datetime
 import sys
 import os
 
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from generate_data.generator import generate_order
+from generate_data import generate_order
 
 # Kafka Producer setup
 producer = KafkaProducer(

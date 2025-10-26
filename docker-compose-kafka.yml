@@ -1,5 +1,3 @@
-# docker-compose-kafka.yml
-
 services:
   kafka_producer:
     build:
@@ -9,21 +7,14 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-      jobmanager:
-        condition: service_started
     volumes:
       - flink-ready:/tmp
-    command: >
-      /bin/bash -c "
-      echo 'Waiting for Flink job to be ready...';
-      until [ -f /tmp/flink-job-ready ]; do
-        echo 'Waiting for Flink job...';
-        sleep 1;
-      done;
-      echo '✓ Flink job is ready, starting Kafka producer...';
-      python producer.py;
-      "
+    environment:
+      - MAX_WAIT=300
+    command: python producer.py
     restart: unless-stopped
+    networks:
+      - default
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.1
@@ -78,3 +69,4 @@ volumes:
 networks:
   default:
     name: zaphod
+    external: true

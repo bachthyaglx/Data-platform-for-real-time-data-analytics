@@ -1,5 +1,5 @@
 {
-  "schemaName": "orders_realtime",
+  "schemaName": "orders_pinot",
   "dimensionFieldSpecs": [
     {
       "name": "orderId",

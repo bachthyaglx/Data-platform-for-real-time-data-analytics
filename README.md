@@ -12,17 +12,16 @@
 ## Prerequisites 
 * Python (version >= 3.8)
 * Docker 
+* Make
 
 ## Run program
 ```bash
-# All in one
-docker compose \
-  -f docker-compose-iceberg.yml \
-  -f docker-compose-flink.yml \
-  -f docker-compose-kafka.yml \
-  -f docker-compose-pinot.yml \
-  -f docker-compose-trino.yml \
-  up
+# Run all in one
+make all
+```
+```bash
+# To stop all containers:
+make clean
 ```
 
 ## Network & Ports  

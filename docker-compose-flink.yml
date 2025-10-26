@@ -1,16 +1,11 @@
-# docker-compose-flink.yml
-
 services:
   jobmanager:
     build: ./flink
     hostname: jobmanager
     container_name: jobmanager
-    depends_on:
-      - minio
-      - hive-metastore
     ports:
       - "8081:8081"
-    command: ["bash", "/data/flink/submit_job.sh"]
+    command: jobmanager
     volumes:
       - .:/data/
       - flink-ready:/tmp
@@ -46,3 +41,4 @@ volumes:
 networks:
   default:
     name: zaphod
+    external: true

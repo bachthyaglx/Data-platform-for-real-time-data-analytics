@@ -65,6 +65,5 @@ RUN echo "-> Install JARs: Flink S3 FS plugin" && \
     curl -o /opt/flink/lib/flink-s3-fs-hadoop-1.18.1.jar \
     https://repo1.maven.org/maven2/org/apache/flink/flink-s3-fs-hadoop/1.18.1/flink-s3-fs-hadoop-1.18.1.jar
 
-
 # Set the launch command
 CMD ./bin/start-cluster.sh && sleep infinity
