@@ -20,7 +20,7 @@
 make all
 ```
 ```bash
-# To stop all containers:
+# To stop all containers
 make clean
 ```
 
@@ -33,28 +33,87 @@ make clean
 
 ## Test data in UI
 * Kafka UI (Kafdrop): http://localhost:9000
-  
+
   ![image](images/kafdrop.png)
+
+  Other test option: Test on CLI
+
+  ```bash
+  # List topics
+  docker exec -it broker kafka-topics --list --bootstrap-server broker:9092
+  ```
+
+  ```bash
+  # Read data from a topic
+  docker exec -it broker kafka-console-consumer \
+  --bootstrap-server broker:9092 \
+  --topic orders \
+  --from-beginning
+  ```
 
 * Flink UI: http://localhost:8081
   
   ![image](images/flink.png)
 
+  Other test option: Test on CLI
+
+  ```bash
+  # List running jobs
+  docker exec -it jobmanager flink list
+  ```
+
 * Iceberg UI: http://localhost:9001 (admin/password)
   
   ![image](images/minio.png)
+
+  Other test option: Test on CLI
+
+  ```bash
+  # List buckets
+  docker exec -it createbuckets /usr/bin/mc ls minio/warehouse
+  ```
+
+  ```bash
+  # List iceberg catalogs in PyIceberg
+  docker exec -it pyiceberg python -m pyiceberg list dev
+  ```
 
 * Pinot UI: http://localhost:9003 
 
   ![alt text](images/pinot.png)
 
+  Other test option: Test on CLI
+
+  ```bash
+  # List tables
+  docker exec -it pinot-controller /opt/pinot/bin/pinot-admin.sh ListTables \
+  -controllerHost pinot-controller \
+  -controllerPort 9000
+  ```
+
+  ```bash
+  # Query data from a table
+  docker exec -it pinot-controller \
+  /opt/pinot/bin/pinot-admin.sh Query \
+  -brokerHost pinot-broker \
+  -brokerPort 8099 \
+  -query "SELECT * FROM orders_REALTIME LIMIT 5"
+  ```
+
 * Trino UI: http://localhost:8082 
 
   ```bash
+  # Open Shell
   docker exec -it trino trino
-  ```
 
-  Then, run following cmds to see results
+  ```
+  ```bash
+  # Access schema and query data from a table
+  SHOW CATALOGS;
+  USE iceberg.default;
+  SHOW TABLES;
+  SELECT * FROM orders LIMIT 5;
+  ```
 
   ![alt text](images/trino.png)
 
