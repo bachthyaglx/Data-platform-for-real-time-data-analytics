@@ -1,4 +1,4 @@
-# generate_data/generator.py
+# kafka/generator.py
 import random
 import uuid
 import time

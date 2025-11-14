@@ -26,7 +26,7 @@ make clean
 
 ## Network & Ports  
 - **[http://localhost:9000](http://localhost:9000)** → Kafka UI
-- **[http://localhost:8081](http://localhost:8081)** → Stream processing UI
+- **[http://localhost:8081](http://localhost:8081)** → Flink stream processing UI
 - **[http://localhost:9001](http://localhost:9001)** → Object storage UI (HiveMeta, MinIO, json data)
 - **[http://localhost:9003](http://localhost:9003)** → Pinot real-time analytics
 - **[http://localhost:8082](http://localhost:8090)** → Trino query engine UI
@@ -36,7 +36,7 @@ make clean
 
   ![image](images/kafdrop.png)
 
-  Other test option: Test on CLI
+  Alternative option: Test on CLI
 
   ```bash
   # List topics
@@ -55,7 +55,7 @@ make clean
   
   ![image](images/flink.png)
 
-  Other test option: Test on CLI
+  Alternative option: Test on CLI
 
   ```bash
   # List running jobs
@@ -66,7 +66,7 @@ make clean
   
   ![image](images/minio.png)
 
-  Other test option: Test on CLI
+  Alternative option: Test on CLI
 
   ```bash
   # List buckets
@@ -82,7 +82,7 @@ make clean
 
   ![alt text](images/pinot.png)
 
-  Other test option: Test on CLI
+  Alternative option: Test on CLI
 
   ```bash
   # List tables
@@ -105,8 +105,8 @@ make clean
   ```bash
   # Open Shell
   docker exec -it trino trino
-
   ```
+  
   ```bash
   # Access schema and query data from a table
   SHOW CATALOGS;
@@ -157,7 +157,43 @@ print(f"Total rows: {len(df)}")
 - [x] Trino query + Docker manifest
 - [x] Pinot real-time analytics + Docker manifest
 - [ ] Kubernetes + Prometheus + Grafana monitoring deployment performance
+  + [ ] Zookeeper
+  + [ ] Kafka
+  + [ ] MinIO
+  + [ ] Hive Metastore
+  + [ ] Flink
+  + [ ] Pinot
+  + [ ] Trino
+  + [ ] PyIceberg
+  + [ ] Ingress (optional)
 - [ ] Optional: Export api/metrics backend for each manifest
 - [ ] Optional: Build custom UI for services
 - [ ] !!!!Optional: Fullstack production!!!!
 
+## Kubernetes
+
+```bash
+# Create cluster (internal)
+k3d cluster create thesis-cluster \
+  --agents 2 \
+  -p "8081:8081@loadbalancer" \
+  -p "9000:9000@loadbalancer" \
+  -p "9001:9001@loadbalancer" \
+  -p "9092:9092@loadbalancer" \
+  -p "9003:9000@loadbalancer" \
+  -p "8090:8080@loadbalancer" \
+  --api-port 6550 \
+  --k3s-arg "--disable=traefik@server:0"
+```
+
+```bash
+# Create cluster (expose ports for UI, recommended)
+k3d cluster create thesis-cluster \
+  --registry-use k3d-thesis-registry:51121 \ 
+  --agents 2 \
+  -p "30090:30090@server:0" \   # Kafdrop
+  -p "9001:9001@server:0" \     # MinIO UI
+  -p "8081:8081@server:0" \     # Flink
+  -p "8090:8090@server:0" \     # Trino
+  -p "9003:9003@server:0"       # Pinot
+```

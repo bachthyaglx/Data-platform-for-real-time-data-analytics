@@ -1,4 +1,5 @@
 services:
+  # ==================== KAFKA ====================
   kafka_producer:
     build:
       context: .

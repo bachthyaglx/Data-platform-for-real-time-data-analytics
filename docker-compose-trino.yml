@@ -1,4 +1,5 @@
 services:
+  # ==================== TRINO ====================
   trino:
     image: trinodb/trino:435
     container_name: trino

@@ -1,4 +1,5 @@
 services:
+  # ==================== ICEBERG ====================
   hive-metastore:
     build: ./iceberg/hms-standalone-s3
     container_name: hms

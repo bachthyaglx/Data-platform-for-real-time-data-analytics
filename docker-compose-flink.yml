@@ -1,4 +1,5 @@
 services:
+  # ==================== FLINK ====================
   jobmanager:
     build: ./flink
     hostname: jobmanager
