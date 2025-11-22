@@ -178,9 +178,9 @@ Wait 10-20s for all services ready
 
 ### Network and ports
 
-http://localhost:30090 -> Kafdrop UI
-http://localhost:31080 -> Flink UI 
-http://localhost:31001 -> MinIO UI
+- **[http://localhost:30090](http://localhost:30090)** → Kafka UI
+- **[http://localhost:31080](http://localhost:31080)** → Flink UI
+- **[http://localhost:31001](http://localhost:31001)** → MinIO UI
 
 ### Current issues:
 * Flink UI, data is NOT sent and received, cause restarting once submitted jobs.
