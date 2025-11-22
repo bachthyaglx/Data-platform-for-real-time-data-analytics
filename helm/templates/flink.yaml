@@ -1,0 +1,137 @@
+{{- if .Values.flink.enabled }}
+
+# ======================================
+# ConfigMap: flink-sql Jobs
+# ======================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flink-sql-jobs
+  namespace: {{ include "data-platform.namespace" . }}
+data:
+  kafka-to-iceberg.sql: |
+{{ .Values.flink.sqlJobs.multiStatementSql | indent 4 }}
+
+---
+
+# ======================================
+# Service: JobManager
+# ======================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-jobmanager
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  type: NodePort
+  selector:
+    app: flink-jobmanager
+  ports:
+    - name: rpc
+      port: 6123
+    - name: ui
+      port: {{ .Values.flink.jobManager.port }}
+      nodePort: {{ .Values.flink.jobManager.nodePort }}
+
+---
+
+# ======================================
+# Deployment: JobManager
+# ======================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-jobmanager
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  replicas: {{ .Values.flink.jobManager.replicas }}
+  selector:
+    matchLabels:
+      app: flink-jobmanager
+  template:
+    metadata:
+      labels:
+        app: flink-jobmanager
+    spec:
+      containers:
+        - name: jobmanager
+          image: "{{ .Values.flink.image }}:{{ .Values.flink.tag }}"
+          imagePullPolicy: Never
+          args: ["jobmanager"]
+          ports:
+            - containerPort: 6123
+            - containerPort: {{ .Values.flink.jobManager.port }}
+          env:
+            - name: FLINK_PROPERTIES
+              value: |
+                jobmanager.rpc.address: flink-jobmanager
+                jobmanager.rpc.port: 6123
+                rest.port: {{ .Values.flink.jobManager.port }}
+            - name: REST_BIND_ADDRESS
+              value: "0.0.0.0"
+          volumeMounts:
+            - name: hive-conf
+              mountPath: /opt/flink/conf/hive-site.xml
+              subPath: hive-site.xml
+
+            - name: flink-sql
+              mountPath: /opt/flink/jobs/kafka-to-iceberg.sql
+              subPath: kafka-to-iceberg.sql
+
+      volumes:
+        - name: hive-conf
+          configMap:
+            name: hive-site-xml
+
+        - name: flink-sql
+          configMap:
+            name: flink-sql-jobs
+
+---
+
+# ======================================
+# Deployment: TaskManager
+# ======================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-taskmanager
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  replicas: {{ .Values.flink.taskManager.replicas }}
+  selector:
+    matchLabels:
+      app: flink-taskmanager
+  template:
+    metadata:
+      labels:
+        app: flink-taskmanager
+    spec:
+      containers:
+        - name: taskmanager
+          image: "{{ .Values.flink.image }}:{{ .Values.flink.tag }}"
+          imagePullPolicy: Never
+          args: ["taskmanager"]
+          ports:
+            - containerPort: 6121
+          env:
+            - name: FLINK_PROPERTIES
+              value: |
+                jobmanager.rpc.address: flink-jobmanager
+                jobmanager.rpc.port: 6123
+                taskmanager.numberOfTaskSlots: 4
+
+                iceberg.catalog.default.type: hive
+                iceberg.catalog.default.uri: thrift://hms:9083
+                iceberg.catalog.default.warehouse: s3a://warehouse/
+          volumeMounts:
+            - name: hive-conf
+              mountPath: /opt/flink/conf/hive-site.xml
+              subPath: hive-site.xml
+
+      volumes:
+        - name: hive-conf
+          configMap:
+            name: hive-site-xml
+
+{{- end }}

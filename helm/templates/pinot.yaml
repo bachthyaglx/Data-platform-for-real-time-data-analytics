@@ -1,0 +1,152 @@
+{{- if .Values.pinot.enabled }}
+
+# -----------------------
+# ZOOKEEPER (OK)
+# -----------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: pinot-zookeeper
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  ports:
+    - port: {{ .Values.pinot.zkPort }}
+      targetPort: {{ .Values.pinot.zkPort }}
+  selector:
+    app: pinot-zookeeper
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pinot-zookeeper
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pinot-zookeeper
+  template:
+    metadata:
+      labels:
+        app: pinot-zookeeper
+    spec:
+      containers:
+        - name: pinot-zookeeper
+          image: "{{ .Values.pinot.zkImage }}:{{ .Values.pinot.zkTag }}"
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "{{ .Values.pinot.zkPort }}"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000"
+          ports:
+            - containerPort: {{ .Values.pinot.zkPort }}
+
+# -----------------------
+# PINOT CONTROLLER
+# -----------------------
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pinot-controller
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  ports:
+    - port: {{ .Values.pinot.controllerPort }}
+      targetPort: {{ .Values.pinot.controllerPort }}
+  selector:
+    app: pinot-controller
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pinot-controller
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pinot-controller
+  template:
+    metadata:
+      labels:
+        app: pinot-controller
+    spec:
+      containers:
+        - name: pinot-controller
+          image: "{{ .Values.pinot.image }}:{{ .Values.pinot.tag }}"
+          command: ["/opt/pinot/bin/pinot-admin.sh"]
+          args:
+            - StartController
+            - -zkAddress
+            - "pinot-zookeeper:{{ .Values.pinot.zkPort }}"
+            - -controllerPort
+            - "{{ .Values.pinot.controllerPort }}"
+          ports:
+            - containerPort: {{ .Values.pinot.controllerPort }}
+
+# -----------------------
+# PINOT BROKER
+# -----------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pinot-broker
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pinot-broker
+  template:
+    metadata:
+      labels:
+        app: pinot-broker
+    spec:
+      containers:
+        - name: pinot-broker
+          image: "{{ .Values.pinot.image }}:{{ .Values.pinot.tag }}"
+          command: ["/opt/pinot/bin/pinot-admin.sh"]
+          args:
+            - StartBroker
+            - -zkAddress
+            - "pinot-zookeeper:{{ .Values.pinot.zkPort }}"
+            - -brokerPort
+            - "{{ .Values.pinot.brokerPort }}"
+          ports:
+            - containerPort: {{ .Values.pinot.brokerPort }}
+
+# -----------------------
+# PINOT SERVER
+# -----------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pinot-server
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pinot-server
+  template:
+    metadata:
+      labels:
+        app: pinot-server
+    spec:
+      containers:
+        - name: pinot-server
+          image: "{{ .Values.pinot.image }}:{{ .Values.pinot.tag }}"
+          command: ["/opt/pinot/bin/pinot-admin.sh"]
+          args:
+            - StartServer
+            - -zkAddress
+            - "pinot-zookeeper:{{ .Values.pinot.zkPort }}"
+            - -serverAdminPort
+            - "{{ .Values.pinot.serverAdminPort }}"
+          ports:
+            - containerPort: {{ .Values.pinot.serverAdminPort }}
+
+{{- end }}

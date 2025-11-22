@@ -1,0 +1,113 @@
+{{- if .Values.hiveMetastore.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: hms
+  namespace: {{ include "data-platform.namespace" . }}
+  labels:
+    app: hive-metastore
+spec:
+  ports:
+    - port: {{ .Values.hiveMetastore.port }}
+      targetPort: {{ .Values.hiveMetastore.port }}
+      name: thrift
+  selector:
+    app: hive-metastore
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hive-site-xml
+  namespace: {{ include "data-platform.namespace" . }}
+data:
+  hive-site.xml: |
+    <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+    <configuration>
+      <property>
+        <name>hive.metastore.uris</name>
+        <value>thrift://hms:{{ .Values.hiveMetastore.port }}</value>
+      </property>
+      <property>
+        <name>javax.jdo.option.ConnectionURL</name>
+        <value>jdbc:derby:;databaseName=/opt/hive/metastore/metastore_db;create=true</value>
+      </property>
+      <property>
+        <name>javax.jdo.option.ConnectionDriverName</name>
+        <value>org.apache.derby.jdbc.EmbeddedDriver</value>
+      </property>
+      <property>
+        <name>metastore.warehouse.dir</name>
+        <value>{{ .Values.hiveMetastore.warehousePath }}</value>
+      </property>
+      <property>
+        <name>hive.metastore.warehouse.dir</name>
+        <value>{{ .Values.hiveMetastore.warehousePath }}</value>
+      </property>
+      <property>
+        <name>fs.s3a.access.key</name>
+        <value>{{ .Values.minio.accessKey }}</value>
+      </property>
+      <property>
+        <name>fs.s3a.secret.key</name>
+        <value>{{ .Values.minio.secretKey }}</value>
+      </property>
+      <property>
+        <name>fs.s3a.endpoint</name>
+        <value>http://minio:{{ .Values.minio.apiPort }}</value>
+      </property>
+      <property>
+        <name>fs.s3a.path.style.access</name>
+        <value>true</value>
+      </property>
+      <property>
+        <name>fs.s3a.connection.ssl.enabled</name>
+        <value>false</value>
+      </property>
+      <property>
+        <name>fs.s3a.impl</name>
+        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+      </property>
+    </configuration>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hms
+  namespace: {{ include "data-platform.namespace" . }}
+  labels:
+    app: hive-metastore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hive-metastore
+  template:
+    metadata:
+      labels:
+        app: hive-metastore
+    spec:
+      containers:
+        - name: hms
+          image: "{{ .Values.hiveMetastore.image }}:{{ .Values.hiveMetastore.tag }}"
+          imagePullPolicy: {{ .Values.hiveMetastore.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.hiveMetastore.port }}
+          env:
+            - name: WAREHOUSE
+              value: "{{ .Values.hiveMetastore.warehousePath }}"
+            - name: S3_ENDPOINT
+              value: "http://minio:{{ .Values.minio.apiPort }}"
+            - name: AWS_ACCESS_KEY_ID
+              value: "{{ .Values.minio.accessKey }}"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "{{ .Values.minio.secretKey }}"
+            - name: S3_PATH_STYLE_ACCESS
+              value: "true"
+          volumeMounts:
+            - name: hive-conf
+              mountPath: /opt/hive-metastore/conf
+      volumes:
+        - name: hive-conf
+          configMap:
+            name: hive-site-xml
+{{- end }}

@@ -1,0 +1,35 @@
+{{- if .Values.trino.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  type: NodePort
+  selector:
+    app: trino
+  ports:
+    - port: {{ .Values.trino.port }}
+      nodePort: {{ .Values.trino.nodePort }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trino
+  template:
+    metadata:
+      labels:
+        app: trino
+    spec:
+      containers:
+        - name: trino
+          image: "{{ .Values.trino.image }}:{{ .Values.trino.tag }}"
+          ports:
+            - containerPort: {{ .Values.trino.port }}
+{{- end }}

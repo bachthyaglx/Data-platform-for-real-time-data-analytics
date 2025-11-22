@@ -1,0 +1,46 @@
+{{- if .Values.zookeeper.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: {{ include "data-platform.namespace" . }}
+  labels:
+    app: zookeeper
+    {{- include "data-platform.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.zookeeper.port }}
+      name: client
+      targetPort: {{ .Values.zookeeper.port }}
+  selector:
+    app: zookeeper
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+  namespace: {{ include "data-platform.namespace" . }}
+  labels:
+    app: zookeeper
+    {{- include "data-platform.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: "{{ .Values.zookeeper.image }}:{{ .Values.zookeeper.tag }}"
+          ports:
+            - containerPort: {{ .Values.zookeeper.port }}
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "{{ .Values.zookeeper.port }}"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000"
+{{- end }}

@@ -1,0 +1,39 @@
+{{- if .Values.kafdrop.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafdrop
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  type: NodePort
+  selector:
+    app: kafdrop
+  ports:
+    - port: 9000
+      targetPort: 9000
+      nodePort: {{ .Values.kafdrop.nodePort }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafdrop
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafdrop
+  template:
+    metadata:
+      labels:
+        app: kafdrop
+    spec:
+      containers:
+        - name: kafdrop
+          image: "{{ .Values.kafdrop.image }}:{{ .Values.kafdrop.tag }}"
+          env:
+            - name: KAFKA_BROKERCONNECT
+              value: "kafka:9092"
+          ports:
+            - containerPort: 9000
+{{- end }}

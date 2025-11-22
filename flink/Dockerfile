@@ -18,8 +18,11 @@ USER flink
 
 WORKDIR /opt/flink
 
+# Copy SQL Flink jobs into the image
+COPY jobs /opt/flink/jobs
+
 # Set up Hive config
-COPY conf/hive-site.xml ./conf/hive-site.xml
+COPY conf/hive-site.xml /opt/flink/conf/hive-site.xml
 
 # Enable SQL Client to find the job manager when running it from this image
 RUN sed -i "s/jobmanager.rpc.address: localhost/jobmanager.rpc.address: flink-jobmanager/g" ./conf/flink-conf.yaml

@@ -12,7 +12,8 @@ services:
       - flink-ready:/tmp
     environment:
       - MAX_WAIT=300
-    command: python producer.py
+      - PYTHONPATH=/app
+    command: python /app/kafka/producer.py
     restart: unless-stopped
     networks:
       - default

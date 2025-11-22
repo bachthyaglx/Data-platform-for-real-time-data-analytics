@@ -1,0 +1,6 @@
+apiVersion: v2
+name: data-platform
+description: A modern data platform for real-time analytics (Kafka, Flink, Iceberg, Pinot, Trino, MinIO)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,32 @@
+# ./helm/templates/rbac-flink-submitter.yaml
+
+# 1. Định nghĩa Role (Quyền truy cập Deployment và Pods)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: flink-wait-role
+  namespace: {{ include "data-platform.namespace" . }}
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets"]
+  verbs: ["get", "watch", "list"] # Cần quyền này cho kubectl wait
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"] # Quyền phụ trợ nếu cần
+
+---
+
+# 2. Gán Role cho Service Account (default)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flink-wait-binding
+  namespace: {{ include "data-platform.namespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: flink-wait-role
+subjects:
+- kind: ServiceAccount
+  name: default # Gán cho Service Account mặc định
+  namespace: {{ include "data-platform.namespace" . }}

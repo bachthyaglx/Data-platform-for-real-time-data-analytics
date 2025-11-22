@@ -1,0 +1,52 @@
+{{- if .Values.kafkaProducer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-producer
+  namespace: {{ include "data-platform.namespace" . }}
+  labels:
+    app: kafka-producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-producer
+  template:
+    metadata:
+      labels:
+        app: kafka-producer
+    spec:
+      # ==============================================================
+      # THÊM INIT CONTAINER ĐỂ CHỜ KAFKA VÀ KAFDROP SẴN SÀNG
+      # ==============================================================
+      initContainers:
+        - name: wait-for-dependencies
+          image: bitnami/kubectl:latest # Sử dụng image có kubectl để kiểm tra trạng thái
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NAMESPACE
+              value: {{ include "data-platform.namespace" . }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              echo "Waiting for Kafka StatefulSet to be ready (1/1 replicas)..."
+              kubectl wait --for=condition=Ready statefulset/kafka -n $NAMESPACE --timeout=120s
+              echo "Waiting for Kafdrop Deployment to be ready (1/1 replicas)..."
+              kubectl wait --for=condition=Available deployment/kafdrop -n $NAMESPACE --timeout=120s
+              echo "Kafka and Kafdrop are ready. Starting Producer."
+              
+      restartPolicy: Always # Đảm bảo Pod khởi động lại nếu có lỗi
+      # Cần đảm bảo ServiceAccount mặc định có quyền đọc/watch StatefulSet và Deployment
+      serviceAccountName: default 
+      containers:
+        - name: kafka-producer
+          image: "{{ .Values.kafkaProducer.image }}:{{ .Values.kafkaProducer.tag }}"
+          imagePullPolicy: {{ .Values.kafkaProducer.pullPolicy }}
+          env:
+            - name: BOOTSTRAP_SERVERS
+              value: "{{ .Values.kafkaProducer.bootstrapServers }}"
+            - name: TOPIC_NAME
+              value: "{{ .Values.kafkaProducer.topic }}"
+            - name: PYTHONPATH
+              value: "/app"
+{{- end }}

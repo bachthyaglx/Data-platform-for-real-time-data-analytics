@@ -1,0 +1,89 @@
+{{- if .Values.kafka.enabled }}
+
+# ============================================================
+# Service chính cho Kafka (ClusterIP None - StatefulSet Headless)
+# ============================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: {{ include "data-platform.namespace" . }}
+  labels:
+    app: kafka
+spec:
+  clusterIP: None
+  ports:
+    - name: kafka
+      port: {{ .Values.kafka.port }}
+      targetPort: {{ .Values.kafka.port }}
+  selector:
+    app: kafka
+
+---
+
+# ============================================================
+# Service alias để tương thích docker-compose: hostname = broker
+# Flink SQL dùng 'broker:9092' --> phải tạo Service này
+# ============================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: broker
+  namespace: {{ include "data-platform.namespace" . }}
+  labels:
+    app: kafka
+spec:
+  ports:
+    - name: kafka
+      port: {{ .Values.kafka.port }}
+      targetPort: {{ .Values.kafka.port }}
+  selector:
+    app: kafka
+
+---
+
+# ============================================================
+# StatefulSet Kafka
+# ============================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: {{ include "data-platform.namespace" . }}
+  labels:
+    app: kafka
+spec:
+  serviceName: kafka
+  replicas: {{ .Values.kafka.replicas }}
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: "{{ .Values.kafka.image }}:{{ .Values.kafka.tag }}"
+          ports:
+            - containerPort: {{ .Values.kafka.port }}
+          env:
+            - name: KAFKA_BROKER_ID
+              value: "1"
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "{{ .Values.kafka.zookeeperConnect }}"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://0.0.0.0:{{ .Values.kafka.port }}"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka-0.kafka.{{ include "data-platform.namespace" . }}.svc.cluster.local:{{ .Values.kafka.port }}"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "PLAINTEXT:PLAINTEXT"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "PLAINTEXT"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "{{ ternary "true" "false" .Values.kafka.autoCreateTopics }}"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+
+{{- end }}

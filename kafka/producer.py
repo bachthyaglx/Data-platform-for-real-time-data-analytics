@@ -7,12 +7,15 @@ import sys
 import os
 
 # Add parent directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from generate_data import generate_order
+# sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from generate_data.generator import generate_order
 
 # Kafka Producer setup
+bootstrap = os.environ.get("BOOTSTRAP_SERVERS", "kafka:9092")
+
 producer = KafkaProducer(
-    bootstrap_servers='broker:9092',
+    bootstrap_servers=bootstrap,
+    # bootstrap_servers='broker:9092',
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 

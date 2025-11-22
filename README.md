@@ -14,7 +14,7 @@
 * Docker 
 * Make
 
-## Run program
+## Run program (docker-compose)
 ```bash
 # Run all in one
 make all
@@ -26,8 +26,8 @@ make clean
 
 ## Network & Ports  
 - **[http://localhost:9000](http://localhost:9000)** → Kafka UI
-- **[http://localhost:8081](http://localhost:8081)** → Flink stream processing UI
-- **[http://localhost:9001](http://localhost:9001)** → Object storage UI (HiveMeta, MinIO, json data)
+- **[http://localhost:8081](http://localhost:8081)** → Flink UI
+- **[http://localhost:9001](http://localhost:9001)** → Minio UI (HiveMeta, MinIO, json data)
 - **[http://localhost:9003](http://localhost:9003)** → Pinot real-time analytics
 - **[http://localhost:8082](http://localhost:8090)** → Trino query engine UI
 
@@ -100,7 +100,7 @@ make clean
   -query "SELECT * FROM orders_REALTIME LIMIT 5"
   ```
 
-* Trino UI: http://localhost:8082 
+* Trino UI: http://localhost:8090 
 
   ```bash
   # Open Shell
@@ -116,8 +116,6 @@ make clean
   ```
 
   ![alt text](images/trino.png)
-
-* Continue...
 
 ## Troubleshooting
 ### Kafka producer not sending data
@@ -148,52 +146,58 @@ print(f"Total rows: {len(df)}")
 - Check MinIO: http://localhost:9001 (admin/password)
 ```
 
-## Plan
-- [x] Data faker (data source later)
-- [x] Kafka consumer (Kafdrop) + Docker manifest
-- [x] Flink processing + Docker manifest
-- [x] Iceberg MinIO + Docker manifest
-- [x] Volume/storage checks
-- [x] Trino query + Docker manifest
-- [x] Pinot real-time analytics + Docker manifest
-- [ ] Kubernetes + Prometheus + Grafana monitoring deployment performance
-  + [ ] Zookeeper
-  + [ ] Kafka
-  + [ ] MinIO
-  + [ ] Hive Metastore
-  + [ ] Flink
-  + [ ] Pinot
-  + [ ] Trino
-  + [ ] PyIceberg
-  + [ ] Ingress (optional)
-- [ ] Optional: Export api/metrics backend for each manifest
-- [ ] Optional: Build custom UI for services
-- [ ] !!!!Optional: Fullstack production!!!!
+---------------------------------------------------------------------------------------
 
-## Kubernetes
+## Run program (Kubernetes)
+
+NOTE: Change Dockerfile for ./flink, ./iceberg before running. Dockkefile for running kubernetes are different with docker-compose. This NOT mechanismed, soon find a way to fix, so can be used for both cases. 
 
 ```bash
-# Create cluster (internal)
-k3d cluster create thesis-cluster \
-  --agents 2 \
-  -p "8081:8081@loadbalancer" \
-  -p "9000:9000@loadbalancer" \
-  -p "9001:9001@loadbalancer" \
-  -p "9092:9092@loadbalancer" \
-  -p "9003:9000@loadbalancer" \
-  -p "8090:8080@loadbalancer" \
-  --api-port 6550 \
-  --k3s-arg "--disable=traefik@server:0"
+# Create a local Docker Registry
+k3d registry create thesis-registry --port 51121
+
+# Forward necessary ports to localhost
+k3d cluster create thesis-cluster --registry-use k3d-thesis-registry:51121 --agents 2 -p "30090:30090@server:0" -p "31001:31001@server:0" -p "31002:31002@server:0" -p "8081:8081@server:0" -p "9003:9003@server:0" -p "31080:31080@server:0" --api-port 127.0.0.1:6443
+
+# Build and import Docker images
+docker build -t thesis-flink:latest ./flink
+docker build -t kafka-producer:latest -f kafka/Dockerfile .
+docker build -t iceberg-hms:latest ./iceberg
+
+k3d image import kafka-producer:latest thesis-flink:latest iceberg-hms:latest  -c thesis-cluster
+
+# Namespace to organize and isolate the application resources
+kubectl create namespace data-platform
+helm upgrade --install realtime-platform ./helm -n data-platform
+
+# Deploy/upgrade entire application using Helm chart
+kubectl get pods -n data-platform -o wide
 ```
 
-```bash
-# Create cluster (expose ports for UI, recommended)
-k3d cluster create thesis-cluster \
-  --registry-use k3d-thesis-registry:51121 \ 
-  --agents 2 \
-  -p "30090:30090@server:0" \   # Kafdrop
-  -p "9001:9001@server:0" \     # MinIO UI
-  -p "8081:8081@server:0" \     # Flink
-  -p "8090:8090@server:0" \     # Trino
-  -p "9003:9003@server:0"       # Pinot
-```
+Wait 10-20s for all services ready
+
+![alt text](image-2.png)
+
+### Network and ports
+
+http://localhost:30090 -> Kafdrop UI
+http://localhost:31080 -> Flink UI 
+http://localhost:31001 -> MinIO UI
+
+### Current issues:
+* Flink UI, data is NOT sent and received, cause restarting once submitted jobs.
+
+![alt text](image-1.png)
+
+### Plan
+
+- [x] Zookeeper
+- [x] Kafka
+- [ ] Flink
+- [ ] MinIO
+- [ ] Hive Metastore
+- [ ] Pinot
+- [ ] Trino
+- [ ] PyIcebergaZAAZAAZZ
+- [ ] Prometheus 
+- [ ] Grafana

@@ -1,7 +1,7 @@
 services:
   # ==================== ICEBERG ====================
   hive-metastore:
-    build: ./iceberg/hms-standalone-s3
+    build: ./iceberg
     container_name: hms
     depends_on:
       - minio

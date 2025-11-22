@@ -1,2 +1,16 @@
+# Ignore common temporary files
+*.docx
+*.tmp
+*.log
+*.bak
+__pycache__/
+*.pyc
+
+# Ignore environment variable files
+.env
+
+# Ignore IDE specific files/folders
 UI
+k8s
+backup
 docker-compose.yml
