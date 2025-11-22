@@ -17,6 +17,7 @@ spec:
     app: kafka
 
 ---
+
 apiVersion: v1
 kind: Service
 metadata:

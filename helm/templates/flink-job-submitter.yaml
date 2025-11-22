@@ -18,7 +18,7 @@ spec:
     spec:
       initContainers:
         - name: wait-for-flink-ready
-          image: bitnami/kubectl:latest
+          image: bitnami/kubectl:latest 
           imagePullPolicy: IfNotPresent
           env:
             - name: NAMESPACE
@@ -28,18 +28,17 @@ spec:
             - |
               echo "Waiting for flink-jobmanager (Deployment) to be ready..."
               kubectl wait --for=condition=Available deployment/flink-jobmanager -n $NAMESPACE --timeout=120s
-              
               echo "Waiting for flink-taskmanager (Deployment) to be ready..."
               kubectl wait --for=condition=Available deployment/flink-taskmanager -n $NAMESPACE --timeout=120s
-              
               echo "Flink cluster is ready. Proceeding with job submission."
       
       restartPolicy: OnFailure 
-      serviceAccountName: default
+      serviceAccountName: default 
       containers:
         - name: sql-submitter
           image: "{{ .Values.flink.image }}:{{ .Values.flink.tag }}" 
           imagePullPolicy: {{ .Values.flink.pullPolicy }}
+          # Lệnh submit job
           args: ["sql-client.sh", "-f", "/opt/flink/jobs/kafka-to-iceberg.sql", "-s", "auto-submitted-session"]
           env:
             - name: FLINK_CONF_DIR 
