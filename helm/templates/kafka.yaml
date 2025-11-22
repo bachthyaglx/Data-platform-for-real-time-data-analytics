@@ -1,8 +1,5 @@
 {{- if .Values.kafka.enabled }}
 
-# ============================================================
-# Service chính cho Kafka (ClusterIP None - StatefulSet Headless)
-# ============================================================
 apiVersion: v1
 kind: Service
 metadata:
@@ -20,11 +17,6 @@ spec:
     app: kafka
 
 ---
-
-# ============================================================
-# Service alias để tương thích docker-compose: hostname = broker
-# Flink SQL dùng 'broker:9092' --> phải tạo Service này
-# ============================================================
 apiVersion: v1
 kind: Service
 metadata:
@@ -42,9 +34,6 @@ spec:
 
 ---
 
-# ============================================================
-# StatefulSet Kafka
-# ============================================================
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

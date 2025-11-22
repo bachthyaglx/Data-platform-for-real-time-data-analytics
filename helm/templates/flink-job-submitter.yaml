@@ -1,4 +1,4 @@
-# ./flink-job-submitter.yaml (Đã tối ưu hóa với initContainer)
+# ./flink-job-submitter.yaml
 {{- if and .Values.flink.enabled .Values.flink.sqlJobs.enabled }}
 # ========================== # Flink SQL Job Submitter # ========================== 
 apiVersion: batch/v1
@@ -7,7 +7,6 @@ metadata:
   name: flink-sql-submitter
   namespace: {{ include "data-platform.namespace" . }}
   annotations:
-    # Annotation để đảm bảo Job này được chạy lại sau khi triển khai hoặc nâng cấp (nếu cần)
     "helm.sh/hook": post-install,post-upgrade
     # "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
@@ -17,12 +16,9 @@ spec:
       labels:
         app: flink-sql-submitter
     spec:
-      # Sử dụng một image nhẹ có kubectl (như bitnami/kubectl hoặc k8s.gcr.io/hyperkube) để chờ đợi
-      # Nếu bạn đang dùng K3d/Minikube, image này thường có sẵn hoặc bạn có thể dùng Alpine/Curl.
-      # Tuy nhiên, cách đáng tin cậy nhất là dùng kubectl.
       initContainers:
         - name: wait-for-flink-ready
-          image: bitnami/kubectl:latest # Image chứa binary kubectl
+          image: bitnami/kubectl:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: NAMESPACE
@@ -31,22 +27,19 @@ spec:
           args:
             - |
               echo "Waiting for flink-jobmanager (Deployment) to be ready..."
-              # Chờ JobManager Deployment sẵn sàng (tối đa 120s)
               kubectl wait --for=condition=Available deployment/flink-jobmanager -n $NAMESPACE --timeout=120s
               
               echo "Waiting for flink-taskmanager (Deployment) to be ready..."
-              # Chờ TaskManager Deployment sẵn sàng (tối đa 120s)
               kubectl wait --for=condition=Available deployment/flink-taskmanager -n $NAMESPACE --timeout=120s
               
               echo "Flink cluster is ready. Proceeding with job submission."
       
       restartPolicy: OnFailure 
-      serviceAccountName: default # Đảm bảo Job Pod có quyền chạy kubectl wait (nếu không tạo ServiceAccount riêng)
+      serviceAccountName: default
       containers:
         - name: sql-submitter
           image: "{{ .Values.flink.image }}:{{ .Values.flink.tag }}" 
           imagePullPolicy: {{ .Values.flink.pullPolicy }}
-          # Lệnh submit job
           args: ["sql-client.sh", "-f", "/opt/flink/jobs/kafka-to-iceberg.sql", "-s", "auto-submitted-session"]
           env:
             - name: FLINK_CONF_DIR 
