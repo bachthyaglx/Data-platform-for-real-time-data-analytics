@@ -150,8 +150,6 @@ print(f"Total rows: {len(df)}")
 
 ## Run program (Kubernetes)
 
-NOTE: Change Dockerfile for ./flink, ./iceberg before running. Dockkefile for running kubernetes are different with docker-compose. This NOT mechanismed, soon find a way to fix, so can be used for both cases. 
-
 ```bash
 # Create a local Docker Registry
 k3d registry create thesis-registry --port 51121
@@ -176,7 +174,7 @@ kubectl get pods -n data-platform -o wide
 
 Wait 10-20s for all services ready
 
-![alt text](image-2.png)
+![alt text](images/image-2.png)
 
 ### Network and ports
 
@@ -187,7 +185,7 @@ http://localhost:31001 -> MinIO UI
 ### Current issues:
 * Flink UI, data is NOT sent and received, cause restarting once submitted jobs.
 
-![alt text](image-1.png)
+![alt text](images/image-1.png)
 
 ### Plan
 
