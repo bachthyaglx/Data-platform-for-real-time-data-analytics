@@ -1,8 +1,42 @@
 {{- if .Values.flink.enabled }}
 
-# ======================================
-# ConfigMap: flink-sql Jobs
-# ======================================
+# ==========================
+# Flink Hadoop (S3A / MinIO) ConfigMap
+# ==========================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flink-hadoop-conf
+  namespace: {{ include "data-platform.namespace" . }}
+data:
+  core-site.xml: |
+    <configuration>
+      <property>
+        <name>fs.s3a.endpoint</name>
+        <value>http://minio.data-platform.svc.cluster.local:9000</value>
+      </property>
+      <property>
+        <name>fs.s3a.path.style.access</name>
+        <value>true</value>
+      </property>
+      <property>
+        <name>fs.s3a.connection.ssl.enabled</name>
+        <value>false</value>
+      </property>
+      <property>
+        <name>fs.s3a.access.key</name>
+        <value>admin</value>
+      </property>
+      <property>
+        <name>fs.s3a.secret.key</name>
+        <value>password</value>
+      </property>
+    </configuration>
+
+---
+# ==========================
+# Flink SQL Jobs ConfigMap
+# ==========================
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,13 +44,12 @@ metadata:
   namespace: {{ include "data-platform.namespace" . }}
 data:
   kafka-to-iceberg.sql: |
-{{ .Values.flink.sqlJobs.multiStatementSql | indent 4 }}
+{{ tpl .Values.flink.sqlJobs.multiStatementSql . | indent 4 }}
 
 ---
-
-# ======================================
-# Service: JobManager
-# ======================================
+# ==========================
+# JobManager Service
+# ==========================
 apiVersion: v1
 kind: Service
 metadata:
@@ -29,22 +62,26 @@ spec:
   ports:
     - name: rpc
       port: 6123
+      targetPort: 6123
+    - name: blob-server
+      port: 6124
+      targetPort: 6124
     - name: ui
-      port: {{ .Values.flink.jobManager.port }}
-      nodePort: {{ .Values.flink.jobManager.nodePort }}
+      port: {{ .Values.flink.jobmanager.port }}
+      targetPort: {{ .Values.flink.jobmanager.port }}
+      nodePort: {{ .Values.flink.jobmanager.nodePort }}
 
 ---
-
-# ======================================
-# Deployment: JobManager
-# ======================================
+# ==========================
+# JobManager Deployment
+# ==========================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: flink-jobmanager
   namespace: {{ include "data-platform.namespace" . }}
 spec:
-  replicas: {{ .Values.flink.jobManager.replicas }}
+  replicas: {{ .Values.flink.jobmanager.replicas }}
   selector:
     matchLabels:
       app: flink-jobmanager
@@ -55,50 +92,82 @@ spec:
     spec:
       containers:
         - name: jobmanager
-          image: "{{ .Values.flink.image }}:{{ .Values.flink.tag }}"
-          imagePullPolicy: Never
-          args: ["jobmanager"]
+          image: "{{ .Values.flink.image.repository }}:{{ .Values.flink.image.tag }}"
+          imagePullPolicy: {{ .Values.flink.image.pullPolicy }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              echo "Starting JobManager..."
+              /docker-entrypoint.sh jobmanager &
+              JM_PID=$!
+
+              echo "Waiting for JobManager REST API (port 8081)..."
+              until curl -s http://localhost:8081/overview >/dev/null 2>&1; do
+                echo "JobManager not ready yet... sleeping 5s"
+                sleep 5
+              done
+              echo "JobManager REST API is UP."
+
+              echo "Waiting for Hive Metastore TCP (hive-metastore:9083)..."
+              # /dev/tcp là tính năng của bash, chỉ mở TCP socket rồi đóng
+              until (echo > /dev/tcp/hive-metastore/9083) >/dev/null 2>&1; do
+                echo "Hive Metastore not ready yet... sleeping 5s"
+                sleep 5
+              done
+              echo "Hive Metastore is UP."
+
+              echo "Submitting Flink SQL job (Kafka -> Iceberg)..."
+              /opt/flink/bin/sql-client.sh -f /opt/flink/jobs/kafka-to-iceberg.sql || true
+
+              echo "SQL Job submitted (or attempted). Keeping JobManager alive..."
+              wait $JM_PID
+              
           ports:
             - containerPort: 6123
-            - containerPort: {{ .Values.flink.jobManager.port }}
+            - containerPort: 6124
+            - containerPort: {{ .Values.flink.jobmanager.port }}
           env:
+            - name: HADOOP_CONF_DIR
+              value: /opt/flink/hadoop-conf
             - name: FLINK_PROPERTIES
               value: |
                 jobmanager.rpc.address: flink-jobmanager
                 jobmanager.rpc.port: 6123
-                rest.port: {{ .Values.flink.jobManager.port }}
+                rest.port: {{ .Values.flink.jobmanager.port }}
+                blob.server.port: 6124
             - name: REST_BIND_ADDRESS
               value: "0.0.0.0"
           volumeMounts:
-            - name: hive-conf
-              mountPath: /opt/flink/conf/hive-site.xml
-              subPath: hive-site.xml
-
             - name: flink-sql
               mountPath: /opt/flink/jobs/kafka-to-iceberg.sql
               subPath: kafka-to-iceberg.sql
-
+            - name: hadoop-conf
+              mountPath: /opt/flink/hadoop-conf
+            - name: hive-site
+              mountPath: /opt/flink/conf/hive-site.xml
+              subPath: hive-site.xml
       volumes:
-        - name: hive-conf
-          configMap:
-            name: hive-site-xml
-
         - name: flink-sql
           configMap:
             name: flink-sql-jobs
+        - name: hadoop-conf
+          configMap:
+            name: flink-hadoop-conf
+        - name: hive-site
+          configMap:
+            name: hive-config
 
 ---
-
-# ======================================
-# Deployment: TaskManager
-# ======================================
+# ==========================
+# TaskManager Deployment
+# ==========================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: flink-taskmanager
   namespace: {{ include "data-platform.namespace" . }}
 spec:
-  replicas: {{ .Values.flink.taskManager.replicas }}
+  replicas: {{ .Values.flink.taskmanager.replicas }}
   selector:
     matchLabels:
       app: flink-taskmanager
@@ -109,29 +178,36 @@ spec:
     spec:
       containers:
         - name: taskmanager
-          image: "{{ .Values.flink.image }}:{{ .Values.flink.tag }}"
-          imagePullPolicy: Never
+          image: "{{ .Values.flink.image.repository }}:{{ .Values.flink.image.tag }}"
+          imagePullPolicy: {{ .Values.flink.image.pullPolicy }}
           args: ["taskmanager"]
           ports:
             - containerPort: 6121
           env:
+            - name: HADOOP_CONF_DIR
+              value: /opt/flink/hadoop-conf
             - name: FLINK_PROPERTIES
               value: |
                 jobmanager.rpc.address: flink-jobmanager
                 jobmanager.rpc.port: 6123
-                taskmanager.numberOfTaskSlots: 4
-
-                iceberg.catalog.default.type: hive
-                iceberg.catalog.default.uri: thrift://hms:9083
-                iceberg.catalog.default.warehouse: s3a://warehouse/
+                taskmanager.memory.process.size: 2048m
+                taskmanager.memory.jvm-overhead.min: 256m
+                taskmanager.numberOfTaskSlots: {{ .Values.flink.taskmanager.taskSlots }}
+                taskmanager.host: 0.0.0.0
+                taskmanager.bind-host: 0.0.0.0
+                taskmanager.rpc.ask-timeout: 30s
           volumeMounts:
-            - name: hive-conf
+            - name: hadoop-conf
+              mountPath: /opt/flink/hadoop-conf
+            - name: hive-site
               mountPath: /opt/flink/conf/hive-site.xml
               subPath: hive-site.xml
-
       volumes:
-        - name: hive-conf
+        - name: hadoop-conf
           configMap:
-            name: hive-site-xml
+            name: flink-hadoop-conf
+        - name: hive-site
+          configMap:
+            name: hive-config
 
 {{- end }}

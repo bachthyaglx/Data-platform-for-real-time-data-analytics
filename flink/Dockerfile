@@ -1,72 +1,59 @@
 FROM apache/flink:1.18.1-scala_2.12-java11
 SHELL ["/bin/bash", "-c"]
 
-# Install some useful tools
-RUN apt-get update && \
-    apt-get install -y neovim tree lnav unzip
-
-RUN echo "Purge apt artifacts" && \
-    apt-get purge -y --auto-remove $build_deps && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN wget https://github.com/duckdb/duckdb/releases/download/v1.0.0/duckdb_cli-linux-amd64.zip \
-    && unzip duckdb_cli-linux-amd64.zip -d /usr/local/bin \
-    && rm duckdb_cli-linux-amd64.zip
-
 USER flink
-
 WORKDIR /opt/flink
+RUN mkdir -p /opt/flink/hadoop-conf
 
-# Copy SQL Flink jobs into the image
+# Copy SQL jobs + Hive config
 COPY jobs /opt/flink/jobs
-
-# Set up Hive config
 COPY conf/hive-site.xml /opt/flink/conf/hive-site.xml
 
-# Enable SQL Client to find the job manager when running it from this image
+# # Adjust JobManager address for K8s helm
 RUN sed -i "s/jobmanager.rpc.address: localhost/jobmanager.rpc.address: flink-jobmanager/g" ./conf/flink-conf.yaml
 
-# Install JARs
+# ============================================================
+# INSTALL JARS INTO /opt/flink/lib  (not in subfolders)
+# ============================================================
 
-RUN echo "-> Install JARs: Flink's Kafka connector" && \
-    mkdir -p ./lib/kafka && pushd $_ && \
-    curl https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.1.0-1.18/flink-sql-connector-kafka-3.1.0-1.18.jar -O && \
-    popd
+# Kafka connector
+RUN curl -o /opt/flink/lib/flink-sql-connector-kafka-3.1.0-1.18.jar \
+    https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.1.0-1.18/flink-sql-connector-kafka-3.1.0-1.18.jar
 
-RUN echo "-> Install JARs: Flink's Hive connector" && \
-    mkdir -p ./lib/hive && pushd $_ && \
-    curl https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-hive-3.1.3_2.12/1.18.1/flink-sql-connector-hive-3.1.3_2.12-1.18.1.jar -O && \
-    popd
+# Hive connector
+RUN curl -o /opt/flink/lib/flink-sql-connector-hive-3.1.3_2.12-1.18.1.jar \
+    https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-hive-3.1.3_2.12/1.18.1/flink-sql-connector-hive-3.1.3_2.12-1.18.1.jar
 
-RUN echo "-> Install JARs: Dependencies for Iceberg" && \
-    mkdir -p ./lib/iceberg && pushd $_ && \
-    curl https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.18/1.5.0/iceberg-flink-runtime-1.18-1.5.0.jar -O && \
-    popd
+# Iceberg runtime
+RUN curl -o /opt/flink/lib/iceberg-flink-runtime-1.18-1.5.0.jar \
+    https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.18/1.5.0/iceberg-flink-runtime-1.18-1.5.0.jar
 
-RUN echo "-> Install JARs: AWS / Hadoop S3" && \
-    mkdir -p ./lib/aws && pushd $_ && \
-    curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar -O && \
-    curl https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.648/aws-java-sdk-bundle-1.12.648.jar -O  && \
-    popd
+# Hadoop / AWS S3 support
+RUN curl -o /opt/flink/lib/hadoop-aws-3.3.4.jar \
+    https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar && \
+    curl -o /opt/flink/lib/aws-java-sdk-bundle-1.12.648.jar \
+    https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.648/aws-java-sdk-bundle-1.12.648.jar
 
-RUN echo "-> Install JARs: Hadoop" && \
-    mkdir -p ./lib/hadoop && pushd $_ && \
-    curl https://repo1.maven.org/maven2/org/apache/commons/commons-configuration2/2.1.1/commons-configuration2-2.1.1.jar -O && \
-    curl https://repo1.maven.org/maven2/commons-logging/commons-logging/1.1.3/commons-logging-1.1.3.jar -O && \
-    curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-auth/3.3.4/hadoop-auth-3.3.4.jar -O && \
-    curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-common/3.3.4/hadoop-common-3.3.4.jar -O && \
-    curl https://repo1.maven.org/maven2/org/apache/hadoop/thirdparty/hadoop-shaded-guava/1.1.1/hadoop-shaded-guava-1.1.1.jar -O && \
-    curl https://repo1.maven.org/maven2/org/codehaus/woodstox/stax2-api/4.2.1/stax2-api-4.2.1.jar -O && \
-    curl https://repo1.maven.org/maven2/com/fasterxml/woodstox/woodstox-core/5.3.0/woodstox-core-5.3.0.jar -O && \
-    curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-hdfs-client/3.3.4/hadoop-hdfs-client-3.3.4.jar -O && \
-    curl https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-mapreduce-client-core/3.3.4/hadoop-mapreduce-client-core-3.3.4.jar -O  && \
-    popd
+# Hadoop core dependencies
+RUN curl -o /opt/flink/lib/hadoop-hdfs-client-3.3.4.jar \
+    https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-hdfs-client/3.3.4/hadoop-hdfs-client-3.3.4.jar && \
+    curl -o /opt/flink/lib/hadoop-common-3.3.4.jar \
+    https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-common/3.3.4/hadoop-common-3.3.4.jar && \
+    curl -o /opt/flink/lib/hadoop-auth-3.3.4.jar \
+    https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-auth/3.3.4/hadoop-auth-3.3.4.jar && \
+    curl -o /opt/flink/lib/hadoop-shaded-guava-1.1.1.jar \
+    https://repo1.maven.org/maven2/org/apache/hadoop/thirdparty/hadoop-shaded-guava/1.1.1/hadoop-shaded-guava-1.1.1.jar && \
+    curl -o /opt/flink/lib/woodstox-core-5.3.0.jar \
+    https://repo1.maven.org/maven2/com/fasterxml/woodstox/woodstox-core/5.3.0/woodstox-core-5.3.0.jar && \
+    curl -o /opt/flink/lib/stax2-api-4.2.1.jar \
+    https://repo1.maven.org/maven2/org/codehaus/woodstox/stax2-api/4.2.1/stax2-api-4.2.1.jar
 
-# Add Flink S3 FileSystem plugin (needed to write to s3a://)
-RUN echo "-> Install JARs: Flink S3 FS plugin" && \
-    curl -o /opt/flink/lib/flink-s3-fs-hadoop-1.18.1.jar \
+# MapReduce Core
+RUN curl -o /opt/flink/lib/hadoop-mapreduce-client-core-3.3.4.jar \
+    https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-mapreduce-client-core/3.3.4/hadoop-mapreduce-client-core-3.3.4.jar    
+
+# S3 FS plugin
+RUN curl -o /opt/flink/lib/flink-s3-fs-hadoop-1.18.1.jar \
     https://repo1.maven.org/maven2/org/apache/flink/flink-s3-fs-hadoop/1.18.1/flink-s3-fs-hadoop-1.18.1.jar
 
-# Set the launch command
 CMD ./bin/start-cluster.sh && sleep infinity

@@ -15,6 +15,7 @@ kafka:
   port: 9092
   zookeeperConnect: "zookeeper:2181"
   autoCreateTopics: true
+  bootstrapServers: "kafka:9092"
 
 kafdrop:
   enabled: true
@@ -30,139 +31,126 @@ kafkaProducer:
   topic: orders
   bootstrapServers: "kafka:9092"
 
-minio:
-  enabled: true
-  image: minio/minio
-  tag: latest
-  accessKey: admin
-  secretKey: password
-  apiPort: 9000
-  consolePort: 9001
-  apiNodePort: 31002
-  consoleNodePort: 31001
-  defaultBucket: warehouse
-
-hiveMetastore:
-  enabled: true
-  image: iceberg-hms
-  tag: latest
-  pullPolicy: Never
-  port: 9083
-  warehousePath: "s3a://warehouse/"
-
 flink:
   enabled: true
-  image: thesis-flink
-  tag: latest
-  pullPolicy: Never
-
-  jobManager:
+  image:
+    repository: flink-custom
+    tag: latest
+    pullPolicy: Never
+  jobmanager:
     replicas: 1
     port: 8081
     nodePort: 31080
-
-  taskManager:
-    replicas: 2
-
+  taskmanager:
+    replicas: 1
+    taskSlots: 2
   sqlJobs:
     enabled: true
     multiStatementSql: |
-      SET execution.runtime-mode = streaming;
-      SET 'state.checkpoints.dir' = 'file:///tmp/flink-checkpoints';
-      SET 'state.savepoints.dir' = 'file:///tmp/flink-savepoints';
-      SET 'execution.checkpointing.interval' = '3s';
-      SET 'execution.checkpointing.mode' = 'EXACTLY_ONCE';
+      SET 'execution.runtime-mode' = 'streaming';
+      SET 'execution.checkpointing.interval' = '10 s';
 
-      CREATE TABLE t_k_orders (
-        orderId          STRING,
-        customerId       STRING,
-        orderNumber      INT,
-        product          STRING,
-        backordered      BOOLEAN,
-        cost             FLOAT,
-        description      STRING,
-        create_ts        BIGINT,
+      USE CATALOG default_catalog;
+      USE default_database;
+
+      DROP TABLE IF EXISTS orders;
+
+      CREATE TABLE orders (
+        orderId STRING,
+        customerId STRING,
+        orderNumber INT,
+        product STRING,
+        backordered BOOLEAN,
+        cost FLOAT,
+        description STRING,
+        create_ts BIGINT,
         creditCardNumber STRING,
-        discountPercent  INT
+        discountPercent INT
       ) WITH (
         'connector' = 'kafka',
         'topic' = 'orders',
         'properties.bootstrap.servers' = 'kafka:9092',
+        'properties.group.id' = 'flink-orders-iceberg',
+        'properties.auto.offset.reset' = 'earliest',
         'scan.startup.mode' = 'earliest-offset',
-        'format' = 'json'
+        'format' = 'json',
+        'json.ignore-parse-errors' = 'true'
       );
 
-      CREATE TABLE t_i_orders (
-        orderId          STRING,
-        customerId       STRING,
-        orderNumber      INT,
-        product          STRING,
-        backordered      BOOLEAN,
-        cost             FLOAT,
-        description      STRING,
-        create_ts        BIGINT,
-        creditCardNumber STRING,
-        discountPercent  INT
-      ) WITH (
-        'connector' = 'iceberg',
-        'catalog-type'='hive',
-        'catalog-name'='dev',
-        'warehouse' = 's3a://warehouse/',
-        'hive-conf-dir' = '/opt/flink/conf'
+      CREATE CATALOG iceberg_catalog WITH (
+        'type' = 'iceberg',
+        'catalog-type' = 'hive',
+        'uri' = 'thrift://hive-metastore:9083',
+        'warehouse' = 's3a://warehouse/iceberg-data',
+        'fs.s3a.endpoint' = 'http://minio.data-platform.svc.cluster.local:9000',
+        'fs.s3a.path.style.access' = 'true'
       );
 
-      CREATE TABLE t_k_pinot_sink (
-        orderId   STRING,
+      USE CATALOG iceberg_catalog;
+
+      CREATE DATABASE IF NOT EXISTS default_database;
+      USE default_database;
+
+      CREATE TABLE IF NOT EXISTS orders_filtered (
+        orderId STRING,
         customerId STRING,
         product STRING,
         cost FLOAT,
         create_ts BIGINT
       ) WITH (
-        'connector' = 'kafka',
-        'topic' = 'pinot_orders_realtime',
-        'properties.bootstrap.servers' = 'kafka:9092',
-        'format' = 'json'
+        'write.format.default' = 'parquet'
       );
 
-      INSERT INTO t_i_orders
-      SELECT *
-      FROM t_k_orders
-      WHERE cost > 100;
+      INSERT INTO iceberg_catalog.default_database.orders_filtered
+      SELECT
+        orderId,
+        customerId,
+        product,
+        cost,
+        create_ts
+      FROM default_catalog.default_database.orders
+      WHERE cost > 160;
 
-      INSERT INTO t_k_pinot_sink
-      SELECT 
-          orderId,
-          customerId,
-          product,
-          cost,
-          create_ts
-      FROM t_k_orders
-      WHERE cost > 100;
+minio:
+  enabled: true
+  image: minio/minio
+  tag: "RELEASE.2024-11-07T00-52-20Z"
+  accessKey: admin
+  secretKey: password
+  defaultBuckets: "warehouse"
+  nodePort: 31001
+
+trino:
+  enabled: true
+  image:
+    repository: trinodb/trino
+    tag: "449"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 8080
+  nodePort: 31081
 
 pinot:
   enabled: true
   image: apachepinot/pinot
-  tag: "0.12.0"
-  controllerPort: 9000
-  brokerPort: 8099
-  serverAdminPort: 8097
-  zkImage: zookeeper
-  zkTag: "3.8"
-  zkPort: 2181
-
-trino:
-  enabled: true
-  image: trinodb/trino
-  tag: "435"
-  port: 8080
-  nodePort: 30890 # range between 30000 – 32767
-
-pyiceberg:
-  enabled: true
-  image: python
-  tag: "3.12-bookworm"
-
-ingress:
-  enabled: false
-  className: ""
-  host: "data-platform.local"
+  tag: "1.1.0"
+  clusterName: "pinot-cluster"
+  controller:
+    port: 9000
+    nodePort: 31090
+  broker:
+    port: 8099
+  server:
+    port: 8098
+  deepStorage:
+    scheme: "s3"
+    bucket: "warehouse"
+    region: "us-east-1"
+    endpoint: "http://minio.data-platform.svc.cluster.local:9000"
+    accessKey: "admin"
+    secretKey: "password"
+  data:
+    schemaName: "orders"
+    tableName: "orders"
+    kafkaTopic: "orders"
+    kafkaBroker: "kafka:9092"

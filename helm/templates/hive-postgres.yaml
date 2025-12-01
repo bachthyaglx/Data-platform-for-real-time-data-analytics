@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-hive
+  namespace: data-platform
+spec:
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app: postgres-hive
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-hive
+  namespace: data-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-hive
+  template:
+    metadata:
+      labels:
+        app: postgres-hive
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:9.5
+          env:
+            - name: POSTGRES_USER
+              value: hive
+            - name: POSTGRES_PASSWORD
+              value: hivepassword
+            - name: POSTGRES_DB
+              value: metastore_db
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: pg-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: pg-data
+          emptyDir: {}

@@ -27,7 +27,7 @@ make clean
 ## Network & Ports  
 - **[http://localhost:9000](http://localhost:9000)** → Kafka UI
 - **[http://localhost:8081](http://localhost:8081)** → Flink UI
-- **[http://localhost:9001](http://localhost:9001)** → Minio UI (HiveMeta, MinIO, json data)
+- **[http://localhost:9001](http://localhost:9001)** → Minio UI
 - **[http://localhost:9003](http://localhost:9003)** → Pinot real-time analytics
 - **[http://localhost:8082](http://localhost:8090)** → Trino query engine UI
 
@@ -146,6 +146,8 @@ print(f"Total rows: {len(df)}")
 - Check MinIO: http://localhost:9001 (admin/password)
 ```
 
+This is the end of running app by using docker-compose.
+Next is running and deploying on kubernetes using helm chart.
 ---------------------------------------------------------------------------------------
 
 ## Run program (Kubernetes)
@@ -155,14 +157,21 @@ print(f"Total rows: {len(df)}")
 k3d registry create thesis-registry --port 51121
 
 # Forward necessary ports to localhost
-k3d cluster create thesis-cluster --registry-use k3d-thesis-registry:51121 --agents 2 -p "30090:30090@server:0" -p "31001:31001@server:0" -p "31002:31002@server:0" -p "8081:8081@server:0" -p "9003:9003@server:0" -p "31080:31080@server:0" --api-port 127.0.0.1:6443
+k3d cluster create thesis-cluster \
+  --registry-use k3d-thesis-registry:51121 \
+  --agents 2 \
+  --api-port 127.0.0.1:6443 \
+  -p "30090:30090@server:0" \
+  -p "31080:31080@server:0" \
+  -p "31001:31001@server:0" \
+  -p "31081:31081@server:0" \
+  -p "31090:31090@server:0"
 
 # Build and import Docker images
-docker build -t thesis-flink:latest ./flink
 docker build -t kafka-producer:latest -f kafka/Dockerfile .
-docker build -t iceberg-hms:latest ./iceberg
+docker build -t flink-custom:latest ./flink
 
-k3d image import kafka-producer:latest thesis-flink:latest iceberg-hms:latest  -c thesis-cluster
+k3d image import kafka-producer:latest flink-custom:latest -c thesis-cluster
 
 # Namespace to organize and isolate the application resources
 kubectl create namespace data-platform
@@ -181,21 +190,24 @@ Wait 10-20s for all services ready
 - **[http://localhost:30090](http://localhost:30090)** → Kafka UI
 - **[http://localhost:31080](http://localhost:31080)** → Flink UI
 - **[http://localhost:31001](http://localhost:31001)** → MinIO UI
+- **[http://localhost:31081](http://localhost:31081)** → Trino UI
+- **[http://localhost:31090](http://localhost:31081)** → Pinot UI
+
 
 ### Current issues:
-* Flink UI, data is NOT sent and received, cause restarting once submitted jobs.
+* Pinot UI not started, cmd "helm upgrade ... " takes too long when apply changes including Pinot manifests, then timeout.
 
-![alt text](images/image-1.png)
+![alt text](image-3.png)
 
 ### Plan
 
 - [x] Zookeeper
 - [x] Kafka
-- [ ] Flink
-- [ ] MinIO
-- [ ] Hive Metastore
+- [x] Flink
+- [x] MinIO
+- [x] Hive Metastore
+- [x] Trino
 - [ ] Pinot
-- [ ] Trino
-- [ ] PyIcebergaZAAZAAZZ
 - [ ] Prometheus 
 - [ ] Grafana
+- [ ] ML inference

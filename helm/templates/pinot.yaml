@@ -1,67 +1,84 @@
 {{- if .Values.pinot.enabled }}
-
-# -----------------------
-# ZOOKEEPER (OK)
-# -----------------------
-apiVersion: v1
-kind: Service
-metadata:
-  name: pinot-zookeeper
-  namespace: {{ include "data-platform.namespace" . }}
-spec:
-  ports:
-    - port: {{ .Values.pinot.zkPort }}
-      targetPort: {{ .Values.pinot.zkPort }}
-  selector:
-    app: pinot-zookeeper
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: pinot-zookeeper
-  namespace: {{ include "data-platform.namespace" . }}
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: pinot-zookeeper
-  template:
-    metadata:
-      labels:
-        app: pinot-zookeeper
-    spec:
-      containers:
-        - name: pinot-zookeeper
-          image: "{{ .Values.pinot.zkImage }}:{{ .Values.pinot.zkTag }}"
-          env:
-            - name: ZOOKEEPER_CLIENT_PORT
-              value: "{{ .Values.pinot.zkPort }}"
-            - name: ZOOKEEPER_TICK_TIME
-              value: "2000"
-          ports:
-            - containerPort: {{ .Values.pinot.zkPort }}
-
-# -----------------------
-# PINOT CONTROLLER
-# -----------------------
----
+# =========================
+# Services
+# =========================
 apiVersion: v1
 kind: Service
 metadata:
   name: pinot-controller
   namespace: {{ include "data-platform.namespace" . }}
 spec:
-  ports:
-    - port: {{ .Values.pinot.controllerPort }}
-      targetPort: {{ .Values.pinot.controllerPort }}
+  type: NodePort
   selector:
     app: pinot-controller
+  ports:
+    - name: http
+      port: 9000
+      targetPort: 9000
+      nodePort: {{ .Values.pinot.controller.nodePort }}
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pinot-broker
+  namespace: {{ include "data-platform.namespace" . }}
+spec:
+  selector:
+    app: pinot-broker
+  ports:
+    - name: http
+      port: 8099
+      targetPort: 8099
+
+---
+# =========================
+# ConfigMap (FIXED: Added Controller Port)
+# =========================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pinot-config
+  namespace: {{ include "data-platform.namespace" . }}
+data:
+  pinot-controller.conf: |
+    controller.helix.cluster.name={{ .Values.pinot.clusterName }}
+    controller.zk.str=zookeeper:2181
+    controller.data.dir=/var/pinot/controller/data
+    # --- FIX: Bắt buộc khai báo Port trong config cho bản 1.1.0 ---
+    controller.port=9000
+    controller.access.protocols.http.port=9000
+    # -------------------------------------------------------------
+    # Deep Storage Config
+    pinot.controller.storage.factory.class.s3=org.apache.pinot.plugin.filesystem.s3.S3PinotFS
+    pinot.controller.storage.factory.s3.endpoint={{ .Values.pinot.deepStorage.endpoint }}
+    pinot.controller.storage.factory.s3.accessKey={{ .Values.pinot.deepStorage.accessKey }}
+    pinot.controller.storage.factory.s3.secretKey={{ .Values.pinot.deepStorage.secretKey }}
+    pinot.controller.storage.factory.s3.region={{ .Values.pinot.deepStorage.region }}
+    pinot.controller.storage.factory.s3.disableAcl=false
+
+  pinot-server.conf: |
+    pinot.server.netty.port=8098
+    pinot.server.adminapi.port=8097
+    pinot.server.instance.dataDir=/var/pinot/server/data/index
+    pinot.server.instance.segmentTarDir=/var/pinot/server/data/segment
+    # Deep Storage Config
+    pinot.server.storage.factory.class.s3=org.apache.pinot.plugin.filesystem.s3.S3PinotFS
+    pinot.server.storage.factory.s3.endpoint={{ .Values.pinot.deepStorage.endpoint }}
+    pinot.server.storage.factory.s3.accessKey={{ .Values.pinot.deepStorage.accessKey }}
+    pinot.server.storage.factory.s3.secretKey={{ .Values.pinot.deepStorage.secretKey }}
+    pinot.server.storage.factory.s3.region={{ .Values.pinot.deepStorage.region }}
+
+---
+# =========================
+# 1. Pinot Controller (Deployment)
+# =========================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pinot-controller
   namespace: {{ include "data-platform.namespace" . }}
+  labels:
+    app: pinot-controller
 spec:
   replicas: 1
   selector:
@@ -77,23 +94,36 @@ spec:
           image: "{{ .Values.pinot.image }}:{{ .Values.pinot.tag }}"
           command: ["/opt/pinot/bin/pinot-admin.sh"]
           args:
-            - StartController
-            - -zkAddress
-            - "pinot-zookeeper:{{ .Values.pinot.zkPort }}"
-            - -controllerPort
-            - "{{ .Values.pinot.controllerPort }}"
+            - "StartController"
+            - "-configFileName"
+            - "/etc/pinot/pinot-controller.conf"
           ports:
-            - containerPort: {{ .Values.pinot.controllerPort }}
+            - containerPort: 9000
+          volumeMounts:
+            - name: pinot-config
+              mountPath: /etc/pinot
+          env:
+            # --- FIX: Dùng biến môi trường riêng của Pinot để load plugin ---
+            - name: PINOT_CONTROLLER_OPTS
+              value: "-Dplugins.dir=/opt/pinot/plugins -Dplugins.include=pinot-s3 -Xmx1G"
+            - name: JAVA_OPTS
+              value: "-Dplugins.dir=/opt/pinot/plugins -Dplugins.include=pinot-s3 -Xmx1G"
+      volumes:
+        - name: pinot-config
+          configMap:
+            name: pinot-config
 
-# -----------------------
-# PINOT BROKER
-# -----------------------
 ---
+# =========================
+# 2. Pinot Broker (Deployment)
+# =========================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pinot-broker
   namespace: {{ include "data-platform.namespace" . }}
+  labels:
+    app: pinot-broker
 spec:
   replicas: 1
   selector:
@@ -109,24 +139,33 @@ spec:
           image: "{{ .Values.pinot.image }}:{{ .Values.pinot.tag }}"
           command: ["/opt/pinot/bin/pinot-admin.sh"]
           args:
-            - StartBroker
-            - -zkAddress
-            - "pinot-zookeeper:{{ .Values.pinot.zkPort }}"
-            - -brokerPort
-            - "{{ .Values.pinot.brokerPort }}"
+            - "StartBroker"
+            - "-clusterName"
+            - "{{ .Values.pinot.clusterName }}"
+            - "-zkAddress"
+            - "zookeeper:2181"
           ports:
-            - containerPort: {{ .Values.pinot.brokerPort }}
+            - containerPort: 8099
+          env:
+            # --- FIX: Dùng biến môi trường riêng của Pinot để load plugin ---
+            - name: PINOT_BROKER_OPTS
+              value: "-Dplugins.dir=/opt/pinot/plugins -Dplugins.include=pinot-s3 -Xmx1G"
+            - name: JAVA_OPTS
+              value: "-Dplugins.dir=/opt/pinot/plugins -Dplugins.include=pinot-s3 -Xmx1G"
 
-# -----------------------
-# PINOT SERVER
-# -----------------------
 ---
+# =========================
+# 3. Pinot Server (StatefulSet)
+# =========================
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: pinot-server
   namespace: {{ include "data-platform.namespace" . }}
+  labels:
+    app: pinot-server
 spec:
+  serviceName: pinot-server
   replicas: 1
   selector:
     matchLabels:
@@ -141,12 +180,114 @@ spec:
           image: "{{ .Values.pinot.image }}:{{ .Values.pinot.tag }}"
           command: ["/opt/pinot/bin/pinot-admin.sh"]
           args:
-            - StartServer
-            - -zkAddress
-            - "pinot-zookeeper:{{ .Values.pinot.zkPort }}"
-            - -serverAdminPort
-            - "{{ .Values.pinot.serverAdminPort }}"
+            - "StartServer"
+            - "-clusterName"
+            - "{{ .Values.pinot.clusterName }}"
+            - "-zkAddress"
+            - "zookeeper:2181"
+            - "-configFileName"
+            - "/etc/pinot/pinot-server.conf"
           ports:
-            - containerPort: {{ .Values.pinot.serverAdminPort }}
+            - containerPort: 8098
+          volumeMounts:
+            - name: pinot-config
+              mountPath: /etc/pinot
+          env:
+            # --- FIX: Dùng biến môi trường riêng của Pinot để load plugin ---
+            - name: PINOT_SERVER_OPTS
+              value: "-Dplugins.dir=/opt/pinot/plugins -Dplugins.include=pinot-s3 -Xmx2G"
+            - name: JAVA_OPTS
+              value: "-Dplugins.dir=/opt/pinot/plugins -Dplugins.include=pinot-s3 -Xmx2G"
+      volumes:
+        - name: pinot-config
+          configMap:
+            name: pinot-config
 
+---
+# =========================
+# 4. Job to Create Schema & Table
+# =========================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pinot-table-creation
+  namespace: {{ include "data-platform.namespace" . }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "0"
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app: pinot-table-creation
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-pinot
+          # --- FIX: Đổi từ bitnami/kubectl sang busybox để có lệnh nc ---
+          image: busybox:1.36
+          # -------------------------------------------------------------
+          command: ['sh', '-c', 'until nc -z pinot-controller 9000; do echo waiting for pinot-controller; sleep 5; done']
+      containers:
+        - name: create-table
+          image: curlimages/curl:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "⏳ Waiting 15s for Pinot Controller to be fully ready..."
+              sleep 15
+              
+              echo "🚀 Creating Schema..."
+              curl -X POST -H "Content-Type: application/json" \
+                -d '{
+                  "schemaName": "{{ .Values.pinot.data.schemaName }}",
+                  "dimensionFieldSpecs": [
+                    {"name": "orderId", "dataType": "STRING"},
+                    {"name": "customerId", "dataType": "STRING"},
+                    {"name": "product", "dataType": "STRING"},
+                    {"name": "description", "dataType": "STRING"},
+                    {"name": "creditCardNumber", "dataType": "STRING"}
+                  ],
+                  "metricFieldSpecs": [
+                    {"name": "cost", "dataType": "FLOAT"},
+                    {"name": "orderNumber", "dataType": "INT"},
+                    {"name": "discountPercent", "dataType": "INT"}
+                  ],
+                  "dateTimeFieldSpecs": [{
+                    "name": "create_ts",
+                    "dataType": "LONG",
+                    "format": "1:MILLISECONDS:EPOCH",
+                    "granularity": "1:MILLISECONDS"
+                  }]
+                }' http://pinot-controller:9000/schemas
+
+              echo "🚀 Creating Realtime Table..."
+              curl -X POST -H "Content-Type: application/json" \
+                -d '{
+                  "tableName": "{{ .Values.pinot.data.tableName }}",
+                  "tableType": "REALTIME",
+                  "segmentsConfig": {
+                    "timeColumnName": "create_ts",
+                    "schemaName": "{{ .Values.pinot.data.schemaName }}",
+                    "replicasPerPartition": "1"
+                  },
+                  "tenants": {},
+                  "tableIndexConfig": {
+                    "loadMode": "MMAP",
+                    "streamConfigs": {
+                      "streamType": "kafka",
+                      "stream.kafka.topic.name": "{{ .Values.pinot.data.kafkaTopic }}",
+                      "stream.kafka.broker.list": "{{ .Values.pinot.data.kafkaBroker }}",
+                      "stream.kafka.consumer.type": "lowlevel",
+                      "stream.kafka.consumer.prop.auto.offset.reset": "smallest",
+                      "stream.kafka.consumer.factory.class.name": "org.apache.pinot.plugin.stream.kafka20.KafkaConsumerFactory",
+                      "stream.kafka.decoder.class.name": "org.apache.pinot.plugin.stream.kafka.KafkaJSONMessageDecoder"
+                    }
+                  },
+                  "metadata": {
+                    "customConfigs": {}
+                  }
+                }' http://pinot-controller:9000/tables
 {{- end }}

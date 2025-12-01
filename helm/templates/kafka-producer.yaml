@@ -16,12 +16,9 @@ spec:
       labels:
         app: kafka-producer
     spec:
-      # ==============================================================
-      # THÊM INIT CONTAINER ĐỂ CHỜ KAFKA VÀ KAFDROP SẴN SÀNG
-      # ==============================================================
       initContainers:
         - name: wait-for-dependencies
-          image: bitnami/kubectl:latest # Sử dụng image có kubectl để kiểm tra trạng thái
+          image: bitnami/kubectl:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: NAMESPACE
@@ -29,14 +26,19 @@ spec:
           command: ["/bin/bash", "-c"]
           args:
             - |
-              echo "Waiting for Kafka StatefulSet to be ready (1/1 replicas)..."
-              kubectl wait --for=condition=Ready statefulset/kafka -n $NAMESPACE --timeout=120s
-              echo "Waiting for Kafdrop Deployment to be ready (1/1 replicas)..."
-              kubectl wait --for=condition=Available deployment/kafdrop -n $NAMESPACE --timeout=120s
-              echo "Kafka and Kafdrop are ready. Starting Producer."
+              echo "Waiting for Kafka..."
+              until kubectl wait --for=condition=Ready statefulset/kafka -n $NAMESPACE; do
+                echo "Kafka not ready. Retrying in 5s..."
+                sleep 5
+              done
+              echo "Waiting for Kafdrop..."
+              until kubectl wait --for=condition=Available deployment/kafdrop -n $NAMESPACE; do
+                 echo "Kafdrop not ready. Retrying in 5s..."
+                 sleep 5
+              done
+              echo "All systems go!"
               
-      restartPolicy: Always # Đảm bảo Pod khởi động lại nếu có lỗi
-      # Cần đảm bảo ServiceAccount mặc định có quyền đọc/watch StatefulSet và Deployment
+      restartPolicy: Always
       serviceAccountName: default 
       containers:
         - name: kafka-producer
