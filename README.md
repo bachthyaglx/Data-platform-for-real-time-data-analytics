@@ -197,7 +197,7 @@ Wait 10-20s for all services ready
 ### Current issues:
 * Pinot UI not started, cmd "helm upgrade ... " takes too long when apply changes including Pinot manifests, then timeout.
 
-![alt text](image-3.png)
+![alt text](images/image-3.png)
 
 ### Plan
 
